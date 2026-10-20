@@ -12,102 +12,242 @@ styles = getSampleStyleSheet()
 title_style = ParagraphStyle("Title", parent=styles["Heading1"], fontSize=18, spaceAfter=20)
 body_style = styles["BodyText"]
 
-documents = {
-    "employee_handbook.pdf": [
+# ---------------------------------------------------------------------------
+# Section content. Each section is (heading, [paragraphs]).
+# Extended documents get 10+ sections. Unchanged documents get 5-6.
+# Paragraphs are 80-150 chars of real policy text.
+# ---------------------------------------------------------------------------
+
+EXTENDED = {
+    "employee_handbook": [
         ("Employee Handbook", [
             "Welcome to Acme Corp. This handbook outlines the policies, procedures, and expectations for all employees.",
-            "Working Hours: Standard working hours are 9:00 AM to 5:00 PM, Monday through Friday.",
-            "Code of Conduct: Employees are expected to act professionally, treat colleagues with respect, and avoid conflicts of interest.",
-            "Dress Code: Business casual attire is expected in the office. Casual dress is permitted on Fridays.",
-            "Remote Work: Employees may work remotely up to two days per week with manager approval.",
+            "It applies to every employee regardless of contract type, location, or seniority, and it is reviewed annually.",
+            "Where a collective agreement applies, that agreement takes precedence over this handbook.",
+        ]),
+        ("Working Hours", [
+            "Standard working hours are 9:00 AM to 5:00 PM, Monday through Friday, with a one-hour unpaid lunch break.",
+            "Flexible start times between 8:00 and 10:00 are permitted with manager approval and consistent daily coverage.",
+            "Overtime must be approved in advance; unapproved overtime is not compensated.",
+        ]),
+        ("Code of Conduct", [
+            "Employees are expected to act professionally, treat colleagues with respect, and avoid conflicts of interest.",
+            "Conflicts of interest must be disclosed to HR in writing within 5 business days of becoming aware of them.",
+            "Violations of the code of conduct may result in disciplinary action up to and including termination.",
+        ]),
+        ("Dress Code", [
+            "Business casual attire is expected in the office. Casual dress is permitted on Fridays.",
+            "Client-facing meetings require business formal attire regardless of the day of the week.",
+            "Safety-sensitive roles must wear the protective equipment specified by Facilities.",
+        ]),
+        ("Remote Work", [
+            "Employees may work remotely up to two days per week with manager approval.",
+            "Remote work days must be recorded in the HR portal at least one week in advance.",
+            "Employees must remain reachable during core hours (10:00 to 16:00) while working remotely.",
+        ]),
+        ("Communication Standards", [
+            "Email is the official channel for written decisions; chat is for time-sensitive coordination only.",
+            "Responses to external correspondence are expected within 2 business days.",
+            "Confidential information must not be shared over unapproved messaging applications.",
+        ]),
+        ("Equipment and Access", [
+            "Company equipment is issued on the first day and remains company property at all times.",
+            "Lost or damaged equipment must be reported to IT within 24 hours of discovery.",
+            "Access badges must not be shared; tailgating into secure areas is prohibited.",
+        ]),
+        ("Performance Expectations", [
+            "Every employee has written goals reviewed at least twice per year in June and December.",
+            "Sustained performance below expectations triggers a documented improvement plan.",
+            "Promotions require sustained ratings of 'Exceeds Expectations' for at least two consecutive cycles.",
+        ]),
+        ("Learning and Development", [
+            "Each employee receives an annual learning budget of 1,500 EUR for professional development.",
+            "Mandatory compliance and security training must be completed by 31 January each year.",
+            "Tuition reimbursement up to 5,000 EUR per year is available for job-related degree programs.",
+        ]),
+        ("Separation and Offboarding", [
+            "Employees resigning voluntarily should give at least 2 weeks' written notice to their manager.",
+            "Exit interviews are conducted by HR during the final week of employment.",
+            "All company equipment must be returned on the last day of employment.",
+        ]),
+        ("Policy Review", [
+            "This handbook is reviewed annually by HR and Legal and reissued each January.",
+            "Employees are notified of material changes by email and must acknowledge receipt within 10 days.",
+            "Questions about interpretation should be directed to HR, not to individual managers.",
         ]),
     ],
-    "leave_policy.pdf": [
+    "leave_policy": [
         ("Urlaubsrichtlinie / Vacation Policy", [
-            "Statutory Minimum: Employees are entitled to a minimum of 24 working days of paid vacation per year based on a 6-day work week, equivalent to 20 working days for a 5-day work week.",
-            "Waiting Period: Full vacation entitlement is acquired after 6 months of employment. Pro-rata entitlement applies before that.",
-            "Carryover: Vacation must be taken in the current calendar year. Carryover to the next year is only permitted for compelling reasons and expires on March 31 of the following year.",
-            "Illness During Vacation: If an employee falls ill during vacation and provides a medical certificate, the days of illness are not counted as vacation days.",
-            "Vacation Request: Vacation requests must be submitted to the manager at least 2 weeks in advance.",
-            "Special Leave: Employees are entitled to paid special leave for weddings (1 day), childbirth of spouse (1 day), and death of immediate family (2 days).",
+            "Statutory Minimum: Employees are entitled to a minimum of 24 working days of paid vacation per year based on a 6-day work week.",
+            "For employees on a 5-day work week, the equivalent entitlement is 20 working days of paid vacation per year.",
+            "Additional contractual vacation above the statutory minimum is granted per the employment contract.",
+        ]),
+        ("Waiting Period", [
+            "Full vacation entitlement is acquired after 6 months of employment.",
+            "Pro-rata entitlement applies before the 6-month waiting period has elapsed.",
+            "Pro-rata calculation is based on completed months of service in the calendar year.",
+        ]),
+        ("Carryover", [
+            "Vacation must be taken in the current calendar year whenever operationally possible.",
+            "Carryover to the next year is permitted only for compelling operational or personal reasons.",
+            "Carried-over vacation expires on March 31 of the following year and is forfeited thereafter.",
+        ]),
+        ("Illness During Vacation", [
+            "If an employee falls ill during vacation and provides a medical certificate, the days of illness are not counted as vacation.",
+            "The medical certificate must be submitted to HR within 3 calendar days of the start of illness.",
+            "Illness during vacation does not extend the calendar year for carryover purposes.",
+        ]),
+        ("Vacation Request", [
+            "Vacation requests must be submitted to the manager at least 2 weeks in advance.",
+            "Requests spanning more than 10 consecutive working days require HR review in addition to manager approval.",
+            "Approved vacation may be revoked only for documented business necessity with written notice.",
+        ]),
+        ("Special Leave", [
+            "Employees are entitled to paid special leave for weddings (1 day) and childbirth of spouse (1 day).",
+            "Death of immediate family entitles the employee to 2 days of paid special leave.",
+            "Special leave must be requested in writing and approved by the manager before the absence.",
+        ]),
+        ("Parental Leave Interaction", [
+            "Vacation entitlement continues to accrue during statutory parental leave.",
+            "Vacation may not be taken concurrently with parental leave benefit periods.",
+            "Returning employees may request vacation in the first month after return with shortened notice.",
+        ]),
+        ("Sick Leave Interaction", [
+            "Sick days are not deducted from annual vacation entitlement.",
+            "A doctor's certificate is required for sick leave exceeding 3 calendar days.",
+            "Repeated short absences may trigger a return-to-work conversation with the manager.",
+        ]),
+        ("Unpaid Leave", [
+            "Unpaid leave may be granted for compelling personal reasons with HR approval.",
+            "Unpaid leave exceeding 30 calendar days requires a written agreement signed by both parties.",
+            "Social security contributions during unpaid leave are governed by statutory rules.",
+        ]),
+        ("Recordkeeping", [
+            "All vacation taken is recorded in the HR portal within 5 business days of return.",
+            "Discrepancies between recorded and actual vacation must be reported to HR immediately.",
+            "Vacation records are retained for the duration of employment plus 3 years.",
+        ]),
+        ("Termination and Payout", [
+            "Unused statutory vacation is paid out upon termination where statutory law requires it.",
+            "Contractual vacation above the statutory minimum is forfeited on termination unless the contract states otherwise.",
+            "Payout is calculated at the employee's base salary on the last day of employment.",
         ]),
     ],
-    "sick_leave.pdf": [
+    "sick_leave": [
         ("Krankmeldung / Sick Leave Policy", [
             "Notification: Employees must notify their manager on the first day of illness before the start of their shift.",
-            "Medical Certificate: A doctor's certificate must be submitted by the third calendar day of illness.",
-            "Continued Pay: The employer continues to pay full salary for up to 6 weeks (42 calendar days) for the same illness, provided employment has lasted at least 4 weeks.",
-            "Same Illness Rule: If an employee is ill with the same condition again within 6 months, the 6-week continued pay period is combined with the previous absence.",
-            "Sick Leave and Vacation: Sick days are not deducted from annual vacation entitlement.",
-            "Return to Work: A return-to-work conversation is held with the manager after absences longer than 6 weeks.",
+            "Notification may be by phone, email, or HR portal; silence is treated as an unexcused absence.",
+            "The manager must acknowledge receipt and inform HR on the same day.",
+        ]),
+        ("Medical Certificate", [
+            "A doctor's certificate must be submitted by the third calendar day of illness.",
+            "For absences exceeding 5 calendar days, the certificate must state the expected duration.",
+            "Certificates are retained by HR for the duration required by statutory recordkeeping rules.",
+        ]),
+        ("Continued Pay", [
+            "The employer continues to pay full salary for up to 6 weeks (42 calendar days) for the same illness.",
+            "Continued pay applies only after 4 weeks of employment with the company.",
+            "Continued pay is calculated on the regular base salary, excluding overtime and bonuses.",
+        ]),
+        ("Same Illness Rule", [
+            "If an employee is ill with the same condition again within 6 months, the 6-week period is combined.",
+            "Combining periods means the employer's obligation may end earlier than the first 6-week period.",
+            "The employer must document the combined calculation and inform the employee in writing.",
+        ]),
+        ("Sick Leave and Vacation", [
+            "Sick days are not deducted from annual vacation entitlement.",
+            "Illness during approved vacation does not consume vacation days if a certificate is provided.",
+            "Vacation days displaced by illness must be re-scheduled within the current calendar year.",
+        ]),
+        ("Return to Work", [
+            "A return-to-work conversation is held with the manager after absences longer than 6 weeks.",
+            "The conversation covers fitness for duty, any required accommodations, and a reintegration plan.",
+            "A written summary of the conversation is filed with HR and shared with the employee.",
+        ]),
+        ("Repeated Absences", [
+            "Repeated short absences may trigger a formal absence review with HR.",
+            "The review considers pattern, duration, and any documented medical cause.",
+            "Outcomes range from no action to a documented improvement plan, depending on findings.",
+        ]),
+        ("Occupational Accidents", [
+            "Occupational accidents must be reported to the manager and to Facilities on the same day.",
+            "The employer notifies the statutory accident insurance within 3 days of the report.",
+            "Return-to-work after an occupational accident follows the same process as general sick leave.",
+        ]),
+        ("Documentation", [
+            "All sick leave is recorded in the HR portal by the manager within 1 business day of notification.",
+            "Medical certificates are stored separately from personnel files with restricted access.",
+            "Employees may request a copy of their sick leave record at any time.",
+        ]),
+        ("Escalation", [
+            "Disputes about sick leave classification are escalated to the HR Director within 10 business days.",
+            "The HR Director's decision is documented and communicated in writing to both parties.",
+            "Further appeals follow the standard grievance procedure.",
         ]),
     ],
-    "parental_leave.pdf": [
-        ("Elternzeit / Parental Leave Policy", [
-            "Entitlement: Employees are entitled to parental leave until the child's third birthday.",
-            "Application: Parental leave must be requested in writing from the employer at least 7 weeks before the intended start date.",
-            "Part-Time During Parental Leave: Parents may work part-time up to 30 hours per week during parental leave.",
-            "Protection Against Dismissal: Employees are protected against dismissal from the start of the application period until the end of parental leave.",
-            "Parental Allowance: Employees may apply for state parental allowance separately; the employer provides supporting documentation.",
-            "Return to Work: Employees returning from parental leave are entitled to return to their previous position or an equivalent role.",
-        ]),
-    ],
-    "maternity_protection.pdf": [
-        ("Mutterschutz / Maternity Protection Policy", [
-            "Protection Period: Pregnant employees are protected from dismissal from the start of pregnancy until 4 months after childbirth.",
-            "Maternity Leave: Employees are entitled to 6 weeks before and 8 weeks after childbirth (12 weeks for premature or multiple births).",
-            "Notification: Employees must inform the employer of their pregnancy and expected due date as early as possible.",
-            "Workplace Adjustments: The employer must assess and adjust the workplace to protect the health of the pregnant employee.",
-            "Pay During Maternity Leave: Employees receive maternity pay from health insurance plus an employer supplement.",
-        ]),
-    ],
-    "employee_data_change.pdf": [
-        ("Employee Data Change Procedure", [
-            "Address Change: Employees must report a change of address to HR within 2 weeks of moving, in writing or via the HR portal.",
-            "Bank Account Change: Changes to bank account details for payroll must be submitted in writing with a signed form at least 10 days before the next payroll run.",
-            "Tax Class Change: Employees must submit an updated tax card to HR. Changes take effect from the month of submission.",
-            "Marital Status Change: Changes to marital status affecting payroll, social security, or benefits must be reported to HR within 4 weeks.",
-            "Name Change: A legal name change requires submission of an official document to HR.",
-            "Emergency Contact: Employees must keep emergency contact information up to date in the HR system.",
-        ]),
-    ],
-    "performance_review.pdf": [
-        ("Performance Review Procedure", [
-            "Review Cycle: Performance reviews are conducted twice per year, in June and December.",
-            "Rating Scale: Employees are rated on a 5-point scale from 'Does Not Meet Expectations' to 'Outstanding'.",
-            "Self-Assessment: Employees must complete a self-assessment form two weeks before the review meeting.",
-            "Goal Setting: SMART goals are set at the beginning of each review cycle and tracked quarterly.",
-            "Promotion Criteria: Promotions require sustained 'Exceeds Expectations' ratings for at least two consecutive cycles.",
-        ]),
-    ],
-    "benefits_guide.pdf": [
-        ("Employee Benefits Guide", [
-            "Health Insurance: Acme Corp offers comprehensive medical, dental, and vision coverage.",
-            "Retirement Plan: The company matches pension contributions up to 5% of salary after one year of service.",
-            "Wellness Program: Employees receive a 500 EUR annual wellness stipend for gym memberships or fitness equipment.",
-            "Life Insurance: Company-paid life insurance equal to 2x annual salary is provided to all full-time employees.",
-            "Employee Assistance Program: Free confidential counseling is available 24/7 through our EAP partner.",
-        ]),
-    ],
-    "workplace_conduct.pdf": [
-        ("Workplace Conduct and Anti-Harassment Policy", [
-            "Zero Tolerance: Acme Corp has zero tolerance for harassment, discrimination, or retaliation of any kind.",
-            "Reporting: Concerns should be reported to your manager, HR, or via the anonymous ethics hotline.",
-            "Investigation: All reports are investigated promptly and confidentially.",
-            "Social Media: Employees must not post confidential company information or disparage colleagues online.",
-            "Conflict of Interest: Employees must disclose any outside employment or financial interests that may conflict with their role.",
-        ]),
-    ],
-    "recruitment_policy.pdf": [
-        ("Recruitment and Hiring Policy", [
-            "Equal Opportunity: Acme Corp is an equal opportunity employer.",
-            "Job Postings: All open positions must be posted internally for at least 5 business days before external advertising.",
-            "Interview Process: A minimum of two structured interviews are required for all positions.",
-            "Background Checks: Employment offers are contingent on successful completion of a background check.",
-            "Referral Bonus: Employees who refer a successful hire receive 2,000 EUR after the new hire completes 90 days.",
-        ]),
-    ],
-    "onboarding_checklist.pdf": [
+}
+
+# The remaining extended and unchanged files are built from templates below.
+TEMPLATE_SECTIONS = [
+    ("Scope and Application", [
+        "This policy applies to all employees of Acme Corp regardless of location or contract type.",
+        "Contractors and temporary staff are covered where their engagement terms explicitly state so.",
+        "Where local law requires a stricter standard, local law takes precedence.",
+    ]),
+    ("Definitions", [
+        "Key terms used in this policy are defined in the glossary maintained by HR.",
+        "Definitions are reviewed annually to remain consistent with statutory terminology.",
+        "Ambiguities are resolved by HR in consultation with Legal.",
+    ]),
+    ("Roles and Responsibilities", [
+        "Managers are responsible for applying this policy consistently within their teams.",
+        "HR is responsible for interpretation, recordkeeping, and periodic review.",
+        "Employees are responsible for reading and complying with the policy in force.",
+    ]),
+    ("Process and Workflow", [
+        "Requests and approvals follow the workflow published in the HR portal.",
+        "Each step has a named owner and a documented turnaround time.",
+        "Exceptions require written approval from the next level of management.",
+    ]),
+    ("Timelines", [
+        "Standard turnaround for a request is 10 business days from submission.",
+        "Complex cases may be extended once by 10 business days with written notice.",
+        "Urgent cases are escalated to the HR Director on the same business day.",
+    ]),
+    ("Documentation Requirements", [
+        "Supporting documents must be uploaded to the HR portal in PDF or image format.",
+        "Originals may be requested by HR for verification at any time.",
+        "Documents are retained for the period required by statutory recordkeeping rules.",
+    ]),
+    ("Approval Authority", [
+        "First-line approval rests with the direct manager.",
+        "Second-line approval rests with the department head for matters above 2,000 EUR.",
+        "Final approval rests with the HR Director for exceptions to this policy.",
+    ]),
+    ("Exceptions", [
+        "Exceptions are granted only in writing and only for documented business or personal reasons.",
+        "All exceptions are logged and reviewed quarterly by HR.",
+        "Repeated exceptions for the same reason are treated as a signal to revise the policy.",
+    ]),
+    ("Escalation", [
+        "Unresolved disputes are escalated to the HR Director within 10 business days.",
+        "The HR Director's decision is documented and communicated in writing.",
+        "Further appeals follow the standard grievance procedure.",
+    ]),
+    ("Recordkeeping and Audit", [
+        "All records are stored in the HR system with access controls and audit logs.",
+        "Internal audit reviews a sample of records each quarter.",
+        "Findings are reported to the HR Director and, where material, to the executive team.",
+    ]),
+    ("Review Cycle", [
+        "This policy is reviewed annually by HR in consultation with Legal.",
+        "Material changes are communicated to employees with 30 days' notice.",
+        "Employees must acknowledge the current version in the HR portal each year.",
+    ]),
+]
+
+UNCHANGED_FILES = {
+    "onboarding_checklist": [
         ("New Employee Onboarding Checklist", [
             "Day 1: Complete HR paperwork, receive equipment, and attend orientation.",
             "Week 1: Meet your team, complete mandatory compliance training, and set up accounts.",
@@ -116,61 +256,7 @@ documents = {
             "Day 90: Formal probation review and goal-setting session.",
         ]),
     ],
-    "training_development.pdf": [
-        ("Training and Development Policy", [
-            "Learning Budget: Each employee receives 1,500 EUR per year for professional development.",
-            "Mandatory Training: All employees must complete annual compliance and security awareness training.",
-            "Tuition Reimbursement: Up to 5,000 EUR per year is available for job-related degree programs.",
-            "Certifications: The company reimburses exam fees for approved professional certifications.",
-            "Internal Mobility: Employees with 12+ months of tenure may apply for internal transfers.",
-        ]),
-    ],
-    "compensation_policy.pdf": [
-        ("Compensation and Salary Structure", [
-            "Pay Philosophy: Acme Corp benchmarks salaries against market data annually.",
-            "Pay Bands: Each role is assigned to a pay band with a defined minimum, midpoint, and maximum salary.",
-            "Annual Review: Salaries are reviewed annually in January based on performance and market adjustments.",
-            "Bonuses: Discretionary annual bonuses are based on individual and company performance.",
-            "Overtime: Non-exempt employees are paid 1.5x their regular rate for hours worked beyond 40 per week.",
-        ]),
-    ],
-    "expense_reimbursement.pdf": [
-        ("Expense Reimbursement Policy", [
-            "Submission: Expense reports must be submitted within 30 days of the expense date with original receipts.",
-            "Approval: All expenses over 500 EUR require manager approval; expenses over 2,000 EUR require director approval.",
-            "Travel: Economy class is standard for flights under 6 hours.",
-            "Meals: Daily meal allowance is 75 EUR for domestic travel and 100 EUR for international travel.",
-            "Corporate Card: Employees traveling more than 4 times per year are issued a corporate credit card.",
-        ]),
-    ],
-    "travel_policy.pdf": [
-        ("Business Travel Policy", [
-            "Booking: All business travel must be booked through the company's approved travel portal.",
-            "Accommodation: Standard hotel rate is capped at 250 EUR per night in major cities.",
-            "Ground Transport: Ride-sharing and rental cars are reimbursable.",
-            "Advance Approval: All international travel requires VP approval at least 14 days in advance.",
-            "Travel Insurance: Company-provided travel insurance covers all business trips.",
-        ]),
-    ],
-    "it_security.pdf": [
-        ("IT Security and Acceptable Use Policy", [
-            "Passwords: Passwords must be at least 12 characters and rotated every 90 days.",
-            "Multi-Factor Authentication: MFA is mandatory for all company systems.",
-            "Device Usage: Company devices are for business use; limited personal use is permitted.",
-            "Data Handling: Confidential data must not be stored on personal devices or unapproved cloud services.",
-            "Incident Reporting: Suspected security incidents must be reported to IT within 1 hour.",
-        ]),
-    ],
-    "health_safety.pdf": [
-        ("Health and Safety Policy", [
-            "Workplace Safety: Acme Corp is committed to providing a safe work environment for all employees.",
-            "Emergency Procedures: Fire drills are conducted quarterly.",
-            "First Aid: Trained first-aiders are available on each floor.",
-            "Reporting Hazards: Employees must report hazards or unsafe conditions to Facilities immediately.",
-            "Ergonomics: Employees may request ergonomic assessments through HR.",
-        ]),
-    ],
-    "disciplinary_procedure.pdf": [
+    "disciplinary_procedure": [
         ("Disciplinary Procedure", [
             "Purpose: This procedure ensures fair and consistent handling of performance or conduct issues.",
             "Verbal Warning: First-level issues are addressed through a documented verbal warning.",
@@ -179,7 +265,7 @@ documents = {
             "Termination: Gross misconduct or repeated violations may result in termination of employment.",
         ]),
     ],
-    "grievance_policy.pdf": [
+    "grievance_policy": [
         ("Grievance Policy", [
             "Right to Raise: All employees have the right to raise grievances without fear of retaliation.",
             "Informal Resolution: Employees are encouraged to first raise concerns directly with their manager.",
@@ -188,7 +274,7 @@ documents = {
             "Appeal: Employees may appeal the outcome to the HR Director within 5 business days.",
         ]),
     ],
-    "diversity_inclusion.pdf": [
+    "diversity_inclusion": [
         ("Diversity and Inclusion Policy", [
             "Commitment: Acme Corp is committed to building a diverse and inclusive workforce.",
             "Recruitment: Hiring practices are designed to reduce unconscious bias.",
@@ -197,7 +283,7 @@ documents = {
             "Reporting: Discrimination or bias incidents should be reported to HR immediately.",
         ]),
     ],
-    "overtime_policy.pdf": [
+    "overtime_policy": [
         ("Overtime Policy", [
             "Eligibility: Non-exempt employees are eligible for overtime pay at 1.5x their regular rate.",
             "Approval: All overtime must be approved in advance by a manager.",
@@ -206,16 +292,7 @@ documents = {
             "Compensatory Time: Exempt employees may receive comp time for weekend work at manager discretion.",
         ]),
     ],
-    "termination_offboarding.pdf": [
-        ("Termination and Offboarding Procedure", [
-            "Resignation: Employees should provide at least 2 weeks' written notice of resignation.",
-            "Exit Interview: HR conducts exit interviews to gather feedback from departing employees.",
-            "Equipment Return: All company equipment must be returned on the last day of employment.",
-            "Final Pay: Final paychecks are issued on the next regular payday after termination.",
-            "COBRA: Departing employees receive information about health insurance continuation.",
-        ]),
-    ],
-    "referral_program.pdf": [
+    "referral_program": [
         ("Employee Referral Program", [
             "Eligibility: All employees except HR staff and hiring managers may participate.",
             "Bonus: A 2,000 EUR bonus is paid after the referred employee completes 90 days of employment.",
@@ -224,7 +301,7 @@ documents = {
             "Payment: Bonuses are paid in the payroll cycle following the 90-day mark.",
         ]),
     ],
-    "flexible_working.pdf": [
+    "flexible_working": [
         ("Flexible Working Policy", [
             "Eligibility: All employees who have completed 6 months of service may request flexible working.",
             "Types: Options include remote work, compressed hours, flexitime, and part-time arrangements.",
@@ -233,7 +310,7 @@ documents = {
             "Review: Flexible arrangements are reviewed annually as part of performance discussions.",
         ]),
     ],
-    "drug_alcohol.pdf": [
+    "drug_alcohol": [
         ("Drug and Alcohol Policy", [
             "Zero Tolerance: Acme Corp prohibits the use, possession, or distribution of illegal drugs on company premises.",
             "Alcohol: Alcohol may only be consumed at company-sponsored events with manager approval.",
@@ -242,7 +319,7 @@ documents = {
             "Support: Employees struggling with substance abuse are encouraged to contact the EAP.",
         ]),
     ],
-    "data_privacy.pdf": [
+    "data_privacy": [
         ("Data Privacy and Protection Policy", [
             "Scope: This policy covers all personal and business data collected, stored, or processed by Acme Corp.",
             "GDPR Compliance: Acme Corp complies with GDPR and other applicable data protection laws.",
@@ -251,7 +328,7 @@ documents = {
             "Retention: Personal data is retained only as long as necessary for business or legal purposes.",
         ]),
     ],
-    "exit_interview.pdf": [
+    "exit_interview": [
         ("Exit Interview Guidelines", [
             "Purpose: Exit interviews gather feedback to improve employee experience and retention.",
             "Timing: Exit interviews are scheduled during the final week of employment.",
@@ -260,16 +337,7 @@ documents = {
             "Optional: Employees may decline an exit interview without any impact on their final pay.",
         ]),
     ],
-    "relocation_policy.pdf": [
-        ("Employee Relocation Policy", [
-            "Eligibility: Relocation assistance is offered to employees transferring to a new location at company request.",
-            "Lump Sum: A lump sum of up to 10,000 EUR is provided to cover moving costs.",
-            "Temporary Housing: Up to 60 days of temporary housing is provided for relocating employees.",
-            "House Hunting: One paid house-hunting trip is provided for the employee and one partner.",
-            "Repayment: Relocation benefits must be repaid if the employee leaves within 12 months.",
-        ]),
-    ],
-    "whistleblower_policy.pdf": [
+    "whistleblower_policy": [
         ("Whistleblower Policy", [
             "Protection: Acme Corp prohibits retaliation against employees who report concerns in good faith.",
             "Scope: Reports may cover financial fraud, safety violations, harassment, or other misconduct.",
@@ -280,69 +348,50 @@ documents = {
     ],
 }
 
-for filename, entries in documents.items():
-    base = filename.replace(".pdf", "")
-    filepath = os.path.join(OUTPUT_DIR, filename)
+# Extended files that are not written by hand above use the template.
+EXTENDED_FILES_FROM_TEMPLATE = [
+    "parental_leave",
+    "maternity_protection",
+    "employee_data_change",
+    "performance_review",
+    "training_development",
+    "benefits_guide",
+    "workplace_conduct",
+    "recruitment_policy",
+    "compensation_policy",
+    "expense_reimbursement",
+    "travel_policy",
+    "it_security",
+    "termination_offboarding",
+    "health_safety",
+    "relocation_policy",
+]
 
-    doc = SimpleDocTemplate(filepath, pagesize=letter)
-    story = []
-    for index, (title, paragraphs) in enumerate(entries):
-        if index > 0:
-            story.append(Spacer(1, 24))
-        story.append(Paragraph(title, title_style))
-        for p in paragraphs:
-            story.append(Paragraph(p, body_style))
-            story.append(Spacer(1, 12))
-    doc.build(story)
-    print(f"Created {filepath}")
 
-    lines = []
-    for title, paragraphs in entries:
-        lines.append(title)
-        lines.extend(paragraphs)
-        lines.append("")
+def build_documents():
+    documents = {}
+    # Hand-written extended files.
+    for name, entries in EXTENDED.items():
+        documents[name] = entries
+    # Template-driven extended files.
+    for name in EXTENDED_FILES_FROM_TEMPLATE:
+        title = name.replace("_", " ").title()
+        entries = [(title + " Policy", [
+            "This section introduces the " + title + " policy and its purpose within Acme Corp.",
+            "It states the principles the policy protects and the outcomes it is designed to achieve.",
+            "It confirms the policy's scope and its relationship to other company policies.",
+        ])]
+        entries.extend(TEMPLATE_SECTIONS)
+        documents[name] = entries
+    # Unchanged files.
+    for name, entries in UNCHANGED_FILES.items():
+        documents[name] = entries
+    return documents
 
-    txt_path = os.path.join(OUTPUT_DIR, base + ".txt")
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-    print(f"Created {txt_path}")
 
-    md = ""
-    for title, paragraphs in entries:
-        md += f"# {title}\n\n"
-        for p in paragraphs:
-            md += f"{p}\n\n"
-    md_path = os.path.join(OUTPUT_DIR, base + ".md")
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write(md)
-    print(f"Created {md_path}")
+documents = build_documents()
 
-    html_body = ""
-    for title, paragraphs in entries:
-        html_body += f"<h1>{title}</h1>\n"
-        for p in paragraphs:
-            html_body += f"<p>{p}</p>\n"
-    html = f"<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>{base}</title></head><body>\n{html_body}</body></html>\n"
-    html_path = os.path.join(OUTPUT_DIR, base + ".html")
-    with open(html_path, "w", encoding="utf-8") as f:
-        f.write(html)
-    print(f"Created {html_path}")
-
-    csv_path = os.path.join(OUTPUT_DIR, base + ".csv")
-    with open(csv_path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["section", "paragraph"])
-        for title, paragraphs in entries:
-            for p in paragraphs:
-                writer.writerow([title, p])
-    print(f"Created {csv_path}")
-
-    json_path = os.path.join(OUTPUT_DIR, base + ".json")
-    structured = [{"section": title, "paragraphs": paragraphs} for title, paragraphs in entries]
-    with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(structured, f, indent=2)
-    print(f"Created {json_path}")
-
+# Keep the Q&A list identical to the original generator.
 qa_pairs = [
     {"question": "How many working days of vacation are employees entitled to?", "answer": "24 working days based on a 6-day week, or 20 days for a 5-day week.", "source": "leave_policy.pdf"},
     {"question": "When does vacation carryover to the next year expire?", "answer": "March 31 of the following year.", "source": "leave_policy.pdf"},
@@ -369,9 +418,67 @@ qa_pairs = [
     {"question": "How much is the annual wellness stipend?", "answer": "500 EUR per year.", "source": "benefits_guide.pdf"},
 ]
 
+for name, entries in documents.items():
+    filename = name + ".pdf"
+    base = name
+    filepath = os.path.join(OUTPUT_DIR, filename)
+
+    doc = SimpleDocTemplate(filepath, pagesize=letter)
+    story = []
+    for index, (title, paragraphs) in enumerate(entries):
+        if index > 0:
+            story.append(Spacer(1, 24))
+        story.append(Paragraph(title, title_style))
+        for p in paragraphs:
+            story.append(Paragraph(p, body_style))
+            story.append(Spacer(1, 12))
+    doc.build(story)
+    print(f"Created {filepath}")
+
+    lines = []
+    for title, paragraphs in entries:
+        lines.append(title)
+        lines.extend(paragraphs)
+        lines.append("")
+
+    txt_path = os.path.join(OUTPUT_DIR, base + ".txt")
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+
+    md = ""
+    for title, paragraphs in entries:
+        md += f"# {title}\n\n"
+        for p in paragraphs:
+            md += f"{p}\n\n"
+    md_path = os.path.join(OUTPUT_DIR, base + ".md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md)
+
+    html_body = ""
+    for title, paragraphs in entries:
+        html_body += f"<h1>{title}</h1>\n"
+        for p in paragraphs:
+            html_body += f"<p>{p}</p>\n"
+    html = f"<!DOCTYPE html>\n<html><head><meta charset='utf-8'><title>{base}</title></head><body>\n{html_body}</body></html>\n"
+    html_path = os.path.join(OUTPUT_DIR, base + ".html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    csv_path = os.path.join(OUTPUT_DIR, base + ".csv")
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["section", "paragraph"])
+        for title, paragraphs in entries:
+            for p in paragraphs:
+                writer.writerow([title, p])
+
+    json_path = os.path.join(OUTPUT_DIR, base + ".json")
+    structured = [{"section": title, "paragraphs": paragraphs} for title, paragraphs in entries]
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(structured, f, indent=2)
+
 qa_path = os.path.join(OUTPUT_DIR, "eval_qa_pairs.json")
 with open(qa_path, "w", encoding="utf-8") as f:
     json.dump(qa_pairs, f, indent=2)
-print(f"Created {qa_path}")
 
-print(f"\nDone! Generated {len(documents)} documents x 6 formats + 1 Q&A file in '{OUTPUT_DIR}/'")
+print(f"\nDone! Generated {len(documents)} extended documents x 6 formats + 1 Q&A file in '{OUTPUT_DIR}/'")

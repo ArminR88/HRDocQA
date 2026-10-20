@@ -1,2 +1,5 @@
 HR_dummy_docs/
 chroma_db/
+output_knowledge_base/
+__pycache__/
+*.py[cod]
