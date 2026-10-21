@@ -1,0 +1,82 @@
+[
+  {
+    "id": 1,
+    "raw_query": "hey quick q — how many vacation days do i actually have left this year? does that include carried over days from last year? how many did i use so far? when do they reset? hur många semesterdagar har jag kvar egentligen? och hur många har jag använt? när nollställs dom? tack!"
+  },
+  {
+    "id": 2,
+    "raw_query": "hi im trying to figure out how to request parental leave — where do i even start? what forms do i need? do i submit through the portal or email HR? how far in advance do i apply? can i split it into parts? kan du förklara hur jag ansöker om föräldraledighet steg för steg? vad behöver jag skicka in? vem godkänner? tacksam för hjälp"
+  },
+  {
+    "id": 3,
+    "raw_query": "Hi, I'm Jan Kowalski, jan.k@example.com — I just moved so how do I change my address in the system? do i need to upload proof like a lease or bill? is there a deadline? does it affect my payroll or tax? and how many parental leave days do I get? hur många föräldraledighetsdagar har jag rätt till? räknas helger med?"
+  },
+  {
+    "id": 4,
+    "raw_query": "im going on parental leave soon and im a bit stressed — how does that affect my vacation accrual? do my vacation days still build up while im on leave? what happens to days i already accrued? påverkas mitt semestersparande om jag är föräldraledig? tjänar jag in semester under tiden?"
+  },
+  {
+    "id": 5,
+    "raw_query": "can i carry over unused vacation days to next year? if yes how many max? is there a deadline to use them? do they expire? kan jag spara oanvända semesterdagar till nästa år? finns det en gräns? måste jag ansöka om det?"
+  },
+  {
+    "id": 6,
+    "raw_query": "sorry this is off topic but whats the weather in Warsaw right now? do i need an umbrella today? kan du berätta hur vädret är i Warszawa just nu? behöver jag paraply?"
+  },
+  {
+    "id": 7,
+    "raw_query": "asdkjhasd"
+  },
+  {
+    "id": 8,
+    "raw_query": "i need to update my bank details for payroll — whats the process? what info do i need to provide? how long until it takes effect? also is parental leave paid or unpaid? är föräldraledighet betald? får jag full lön eller en procent?"
+  },
+  {
+    "id": 9,
+    "raw_query": "is parental leave paid? if so how much do i get — full salary or a percentage? does it depend on how long ive worked here? är föräldraledighet betald och hur mycket får jag? får båda föräldrarna samma?"
+  },
+  {
+    "id": 10,
+    "raw_query": "hi my employee ID is 44821 — can you tell me how many vacation days i have left? how many did i use this year? do i have any carried over? hur många semesterdagar har jag kvar? har jag några sparade dagar? tack på förhand"
+  },
+  {
+    "id": 11,
+    "raw_query": "hej! jag undrar hur jag anmäler sjukdom? vem kontaktar jag på morgonen, räcker det med ett mail till chefen, och behöver jag läkarintyg från dag ett eller först efter en vecka? påverkar sjukfrånvaro min semester? tack snälla!"
+  },
+  {
+    "id": 12,
+    "raw_query": "hi — what are the working hours and can i work flexible hours? can i work from home some days? do i need approval from my manager for remote work? vad är arbetstiderna? kan jag jobba hemifrån? and is there a core hours requirement?"
+  },
+  {
+    "id": 13,
+    "raw_query": "im confused about overtime — am i entitled to overtime pay or do i get time off in lieu? how do i log overtime hours? is overtime approved in advance? hur funkar övertid här? får jag betalt eller ledigt? and is there a max per month?"
+  },
+  {
+    "id": 14,
+    "raw_query": "can you explain how the pension plan works? how much does the company contribute? do i need to opt in or is it automatic? när kan jag gå i pension? behöver jag göra något själv? and can i see my current balance somewhere?"
+  },
+  {
+    "id": 15,
+    "raw_query": "hej, jag har en fråga om föräldraledighet för den andra föräldern — får båda föräldrarna samma antal dagar? kan vi vara lediga samtidigt? hur länge är man ledig som partner, och är ersättningen densamma? tacksam för svar!"
+  },
+  {
+    "id": 16,
+    "raw_query": "hi i have a question about expenses — how do i submit a reimbursement for a work trip? what receipts do i need? is there a per diem? how long does reimbursement take? hur ansöker jag om reseersättning? vilka kvitton behövs? finns det traktamente?"
+  },
+  {
+    "id": 17,
+    "raw_query": "im thinking about going part time after my parental leave — is that possible? how do i request reduced hours? does it affect my benefits or vacation? kan jag gå ner i arbetstid? påverkas mina förmåner? and can i go back to full time later?"
+  },
+  {
+    "id": 18,
+    "raw_query": "what happens to my vacation days if i quit or change jobs internally? are unused days paid out? do i lose them? vad händer med mina semesterdagar om jag slutar? får jag pengar för dom? and what about carried over days?"
+  },
+  {
+    "id": 19,
+    "raw_query": "hi is there a wellness benefit or gym allowance? how do i claim it? is there a limit per year? finns det friskvårdsbidrag? hur ansöker jag? and does it cover things like massage or sports equipment?"
+  },
+  {
+    "id": 20,
+    "raw_query": "quick one — how do i update my emergency contact and personal details? is it the same place as address? do i need to confirm with HR? hur uppdaterar jag mina kontaktuppgifter? behöver jag meddela HR? and does it show up anywhere publicly?"
+  }
+]

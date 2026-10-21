@@ -1,0 +1,185 @@
+{
+  "metadata": {
+    "timestamp_utc": "2026-10-21T10:37:59.441077+00:00",
+    "model": "deepseek-flash",
+    "max_attempts": 3,
+    "entrypoint": "build_graph",
+    "experiment": "baseline_v1"
+  },
+  "results": [
+    {
+      "id": 1,
+      "raw_query": "How many vacation days do I have?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "How many vacation days do I have?"
+      ],
+      "analyzed": [
+        {
+          "text": "How many vacation days do I have?",
+          "topic": "vacation",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 2,
+      "raw_query": "How do I request parental leave?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "How do I request parental leave?"
+      ],
+      "analyzed": [
+        {
+          "text": "How do I request parental leave?",
+          "topic": "parental_leave",
+          "speech_act": "instruction"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 3,
+      "raw_query": "Hi, I'm Jan Kowalski, jan.k@example.com — how do I change my address and how many parental leave days do I get?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "How do I change my address?",
+        "How many parental leave days do I get?"
+      ],
+      "analyzed": [
+        {
+          "text": "How do I change my address?",
+          "topic": "employee_change",
+          "speech_act": "instruction"
+        },
+        {
+          "text": "How many parental leave days do I get?",
+          "topic": "parental_leave",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 4,
+      "raw_query": "I'm going on parental leave, how does that affect my vacation accrual?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "How does going on parental leave affect my vacation accrual?"
+      ],
+      "analyzed": [
+        {
+          "text": "How does going on parental leave affect my vacation accrual?",
+          "topic": "parental_leave",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 5,
+      "raw_query": "Can I carry over unused vacation days to next year?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "Can I carry over unused vacation days to next year?"
+      ],
+      "analyzed": [
+        {
+          "text": "Can I carry over unused vacation days to next year?",
+          "topic": "vacation",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 6,
+      "raw_query": "What is the weather in Warsaw?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "What is the weather in Warsaw?"
+      ],
+      "analyzed": [
+        {
+          "text": "What is the weather in Warsaw?",
+          "topic": "unidentified",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 7,
+      "raw_query": "asdkjhasd",
+      "polish_status": "failed",
+      "polished_questions": [],
+      "analyzed": [],
+      "final_message": "Sorry HRDocQA cannot polish the question.",
+      "error": null
+    },
+    {
+      "id": 8,
+      "raw_query": "What's the process for updating my bank details, and is parental leave paid?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "What is the process for updating my bank details?",
+        "Is parental leave paid?"
+      ],
+      "analyzed": [
+        {
+          "text": "What is the process for updating my bank details?",
+          "topic": "employee_change",
+          "speech_act": "instruction"
+        },
+        {
+          "text": "Is parental leave paid?",
+          "topic": "parental_leave",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 9,
+      "raw_query": "Is parental leave paid?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "Is parental leave paid?"
+      ],
+      "analyzed": [
+        {
+          "text": "Is parental leave paid?",
+          "topic": "parental_leave",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    },
+    {
+      "id": 10,
+      "raw_query": "My employee ID is 44821, can you tell me how many vacation days I have left?",
+      "polish_status": "ok",
+      "polished_questions": [
+        "For employee ID [EMPLOYEE_ID], how many vacation days do I have left?"
+      ],
+      "analyzed": [
+        {
+          "text": "For employee ID [EMPLOYEE_ID], how many vacation days do I have left?",
+          "topic": "vacation",
+          "speech_act": "factual"
+        }
+      ],
+      "final_message": null,
+      "error": null
+    }
+  ]
+}
