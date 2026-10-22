@@ -18,14 +18,9 @@ def _read_summary(path: Path) -> dict:
     Example:
         >>> _read_summary(Path("01_chunking.json"))
     """
-    # Missing summary means that stage was disabled.
-    # Callers use .get(..., 0) so the banner row shows zeros.
-    if path.exists() == True:
-        summary_text = path.read_text(encoding="utf-8")
-        summary = json.loads(summary_text)
-        return summary
-    empty_summary = {}
-    return empty_summary
+    summary_text = path.read_text(encoding="utf-8")
+    summary = json.loads(summary_text)
+    return summary
 
 
 def _build_banner(rows: list[dict], totals: dict) -> str:
@@ -104,8 +99,7 @@ def run_stage() -> None:
     with chunks_csv_path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=chunks_fieldnames)
         writer.writeheader()
-        empty_rows = []
-        per_file_rows = chunking_summary.get("per_file", empty_rows)
+        per_file_rows = chunking_summary["per_file"]
         for row in per_file_rows:
             output_row = {}
             output_row["source_path"] = row["source_path"]
@@ -144,28 +138,28 @@ def run_stage() -> None:
                 output_row["chunk_index"] = record["chunk_index"]
                 writer.writerow(output_row)
 
-    chunking_elapsed_value = chunking_summary.get("elapsed_s", 0.0)
+    chunking_elapsed_value = chunking_summary["elapsed_s"]
     chunking_elapsed = float(chunking_elapsed_value)
-    embedding_elapsed_value = embedding_summary.get("elapsed_s", 0.0)
+    embedding_elapsed_value = embedding_summary["elapsed_s"]
     embedding_elapsed = float(embedding_elapsed_value)
-    assembling_elapsed_value = assembling_summary.get("elapsed_s", 0.0)
+    assembling_elapsed_value = assembling_summary["elapsed_s"]
     assembling_elapsed = float(assembling_elapsed_value)
 
-    chunking_file_count_value = chunking_summary.get("file_count", 0)
+    chunking_file_count_value = chunking_summary["file_count"]
     chunking_file_count = int(chunking_file_count_value)
-    chunking_chunk_count_value = chunking_summary.get("chunk_count", 0)
+    chunking_chunk_count_value = chunking_summary["chunk_count"]
     chunking_chunk_count = int(chunking_chunk_count_value)
-    embedding_vector_count_value = embedding_summary.get("vector_count", 0)
+    embedding_vector_count_value = embedding_summary["vector_count"]
     embedding_vector_count = int(embedding_vector_count_value)
-    embedding_dim_value = embedding_summary.get("dim", 0)
+    embedding_dim_value = embedding_summary["dim"]
     embedding_dim = int(embedding_dim_value)
-    embedding_skipped_count_value = embedding_summary.get("skipped_count", 0)
+    embedding_skipped_count_value = embedding_summary["skipped_count"]
     embedding_skipped_count = int(embedding_skipped_count_value)
-    assembling_joined_count_value = assembling_summary.get("joined_count", 0)
+    assembling_joined_count_value = assembling_summary["joined_count"]
     assembling_joined_count = int(assembling_joined_count_value)
-    assembling_dim_value = assembling_summary.get("dim", 0)
+    assembling_dim_value = assembling_summary["dim"]
     assembling_dim = int(assembling_dim_value)
-    assembling_skipped_count_value = assembling_summary.get("skipped_count", 0)
+    assembling_skipped_count_value = assembling_summary["skipped_count"]
     assembling_skipped_count = int(assembling_skipped_count_value)
 
     monitoring_rows = [
@@ -208,9 +202,7 @@ def run_stage() -> None:
     total_chunks = chunking_chunk_count
     total_vectors = embedding_vector_count
     total_joined = assembling_joined_count
-    assembling_dim_default = assembling_summary.get("dim", 0)
-    embedding_dim_for_total = embedding_summary.get("dim", assembling_dim_default)
-    total_dim = int(embedding_dim_for_total)
+    total_dim = embedding_dim
     total_skipped = embedding_skipped_count + assembling_skipped_count
     total_elapsed = chunking_elapsed + embedding_elapsed + assembling_elapsed
 

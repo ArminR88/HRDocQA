@@ -76,11 +76,9 @@ def write_jsonl(path: Path, rows) -> None:
         >>> write_jsonl(Path("rows.jsonl"), [{"id": "a"}, {"id": "b"}])
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="\n") as handle:
-        first = True
-        for row in rows:
-            if first == False:
-                handle.write("\n")
-            serialized = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
-            handle.write(serialized)
-            first = False
+    serialized_rows = [
+        json.dumps(row, ensure_ascii=False, separators=(",", ":"))
+        for row in rows
+    ]
+    serialized = "\n".join(serialized_rows)
+    path.write_text(serialized, encoding="utf-8", newline="\n")

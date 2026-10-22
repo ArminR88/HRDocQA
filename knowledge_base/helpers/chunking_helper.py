@@ -22,10 +22,6 @@ def split_sentences(text: str) -> list[str]:
         ['Dr. Smith arrived.', 'He spoke.']
     """
     stripped = text.strip()
-    if not stripped:
-        sentences = []
-        return sentences
-
     boundaries: list[int] = []
     for match in re.finditer(r"[.!?]", stripped):
         idx = match.start()
@@ -49,10 +45,6 @@ def split_sentences(text: str) -> list[str]:
         if re.match(r'^\s+(?:["\')\]]\s*)?[A-Z]', trailing):
             boundaries.append(idx + 1)
 
-    if not boundaries:
-        sentences = [stripped]
-        return sentences
-
     sentences: list[str] = []
     start = 0
     for end in boundaries:
@@ -70,10 +62,11 @@ def split_sentences(text: str) -> list[str]:
 def _split_keep_separator(text: str, separator: str) -> list[str]:
     raw_parts = text.split(separator)
     pieces: list[str] = []
-    for idx, piece in enumerate(raw_parts):
-        if not piece:
-            continue
-        if idx < len(raw_parts) - 1:
+    indexed_parts = enumerate(raw_parts)
+    for indexed_part in indexed_parts:
+        index = indexed_part[0]
+        piece = indexed_part[1]
+        if index < len(raw_parts) - 1:
             joined_piece = f"{piece}{separator}"
             cleaned_piece = joined_piece.strip()
             pieces.append(cleaned_piece)
@@ -85,13 +78,7 @@ def _split_keep_separator(text: str, separator: str) -> list[str]:
 
 def _recursive_split(text: str, chunk_size: int, separators: list[str], index: int) -> list[str]:
     stripped = text.strip()
-    if not stripped:
-        chunks = []
-        return chunks
     if len(stripped) <= chunk_size:
-        chunks = [stripped]
-        return chunks
-    if index >= len(separators):
         chunks = [stripped]
         return chunks
 
@@ -104,8 +91,6 @@ def _recursive_split(text: str, chunk_size: int, separators: list[str], index: i
     split_pieces: list[str] = []
     for piece in pieces:
         current = piece.strip()
-        if not current:
-            continue
         if len(current) <= chunk_size:
             split_pieces.append(current)
         else:
@@ -132,11 +117,9 @@ def _build_sentence_overlap(previous_chunk: str, chunk_overlap: int) -> str:
     tail_parts: list[str] = []
     # Grow overlap from sentence boundaries while staying within overlap budget.
     for sentence in reversed(sentences):
-        if not tail_parts:
-            candidate = sentence
-        else:
-            joined_tail = " ".join(tail_parts)
-            candidate = f"{joined_tail} {sentence}"
+        candidate_parts = list(tail_parts)
+        candidate_parts.append(sentence)
+        candidate = " ".join(candidate_parts)
         if len(candidate) <= chunk_overlap:
             tail_parts.insert(0, sentence)
         else:
@@ -166,8 +149,6 @@ def split_recursive(
         ['A. B.', 'C.']
     """
     chunks = _recursive_split(text=text, chunk_size=chunk_size, separators=separators, index=0)
-    if not chunks:
-        return chunks
     chunk_count = len(chunks)
 
     with_overlap: list[str] = [chunks[0]]
@@ -175,10 +156,9 @@ def split_recursive(
     for idx in chunk_indices:
         overlap_tail = _build_sentence_overlap(chunks[idx - 1], chunk_overlap)
         current = chunks[idx]
-        if overlap_tail:
-            candidate = f"{overlap_tail} {current}"
-            if len(candidate) <= chunk_size:
-                current = candidate
+        candidate = f"{overlap_tail} {current}".strip()
+        if len(candidate) <= chunk_size:
+            current = candidate
         with_overlap.append(current)
     return with_overlap
 
@@ -202,9 +182,6 @@ def chunk_section(paragraphs: list[str], chunk_size: int, chunk_overlap: int) ->
     # Join section paragraphs with hard section boundaries preserved.
     joined_text = "\n\n".join(paragraphs)
     section_text = joined_text.strip()
-    if not section_text:
-        chunks = []
-        return chunks
     chunks = split_recursive(
         text=section_text,
         chunk_size=chunk_size,

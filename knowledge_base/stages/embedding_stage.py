@@ -62,26 +62,27 @@ def run_stage() -> dict:
     model = load_embedding_model(EMBEDDING_MODEL)
     vector_count = 0
     dim = EMBEDDING_DIM
+    embedding_rows = []
 
-    with embeddings_path.open("w", encoding="utf-8", newline="\n") as writer:
-        first = True
-        for chunk_batch in _iter_chunk_batches(chunks_path, batch_size=32):
-            texts = [row["text"] for row in chunk_batch]
-            vectors = model.encode(texts, convert_to_numpy=False, show_progress_bar=False)
+    for chunk_batch in _iter_chunk_batches(chunks_path, batch_size=32):
+        texts = [row["text"] for row in chunk_batch]
+        vectors = model.encode(texts, convert_to_numpy=False, show_progress_bar=False)
 
-            for chunk_row, vector in zip(chunk_batch, vectors):
-                dim = len(vector)
-                embedding = [float(value) for value in vector]
-                out_row = {}
-                out_row["id"] = chunk_row["id"]
-                out_row["content_hash"] = chunk_row["content_hash"]
-                out_row["embedding"] = embedding
-                if first == False:
-                    writer.write("\n")
-                serialized = json.dumps(out_row, ensure_ascii=False, separators=(",", ":"))
-                writer.write(serialized)
-                first = False
-                vector_count += 1
+        for chunk_vector in zip(chunk_batch, vectors):
+            chunk_row = chunk_vector[0]
+            vector = chunk_vector[1]
+            dim = len(vector)
+            embedding = [float(value) for value in vector]
+            out_row = {}
+            out_row["id"] = chunk_row["id"]
+            out_row["content_hash"] = chunk_row["content_hash"]
+            out_row["embedding"] = embedding
+            serialized = json.dumps(out_row, ensure_ascii=False, separators=(",", ":"))
+            embedding_rows.append(serialized)
+            vector_count += 1
+
+    embedding_text = "\n".join(embedding_rows)
+    embeddings_path.write_text(embedding_text, encoding="utf-8", newline="\n")
 
     elapsed_s = time.time() - start_time
     generated_at = datetime.now()

@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hr_rag_analysis import build_graph
-from hr_rag_analysis.llm import MODEL
+from backend.question_extraction import build_extraction_graph
+from backend.question_extraction.llm import MODEL
 
 ROOT = Path(__file__).resolve().parent.parent
 QUERY_PATH = ROOT / "experiments" / "experiment_queries.json"
@@ -30,30 +30,15 @@ def _run_query(graph: Any, query: dict[str, Any]) -> dict[str, Any]:
     """
     query_id = query["id"]
     raw_query = query["raw_query"]
-    try:
-        state = graph.invoke({"raw_query": raw_query})
-    except Exception as error:
-        error_type = type(error).__name__
-        error_message = str(error)
-        error_text = f"{error_type}: {error_message}"
-        row = {}
-        row["id"] = query_id
-        row["raw_query"] = raw_query
-        row["polish_status"] = f"error: {error_text}"
-        row["polished_questions"] = None
-        row["analyzed"] = None
-        row["final_message"] = None
-        row["error"] = error_text
-        return row
-    analyzed_state = state.get("analyzed")
+    state = graph.invoke({"raw_query": raw_query})
+    analyzed_state = state["analyzed"]
     analyzed = []
-    if analyzed_state is not None:
-        for item in analyzed_state:
-            analyzed_item = {}
-            analyzed_item["text"] = item.text
-            analyzed_item["topic"] = item.topic
-            analyzed_item["speech_act"] = item.speech_act
-            analyzed.append(analyzed_item)
+    for item in analyzed_state:
+        analyzed_item = {}
+        analyzed_item["text"] = item.text
+        analyzed_item["topic"] = item.topic
+        analyzed_item["speech_act"] = item.speech_act
+        analyzed.append(analyzed_item)
     row = {}
     row["id"] = query_id
     row["raw_query"] = raw_query
@@ -80,7 +65,7 @@ def main() -> None:
     """
     query_text = QUERY_PATH.read_text()
     queries = json.loads(query_text)
-    graph = build_graph()
+    graph = build_extraction_graph()
     results = []
     for query in queries:
         row = _run_query(graph, query)
@@ -91,7 +76,7 @@ def main() -> None:
     metadata["timestamp_utc"] = timestamp_utc
     metadata["model"] = MODEL
     metadata["max_attempts"] = MAX_ATTEMPTS
-    metadata["entrypoint"] = "build_graph"
+    metadata["entrypoint"] = "build_extraction_graph"
     metadata["experiment"] = EXPERIMENT_NAME
     output = {}
     output["metadata"] = metadata

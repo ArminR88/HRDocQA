@@ -34,8 +34,7 @@ class AnalyzedQuestion(BaseModel):
 
 class PipelineState(TypedDict, total=False):
     raw_query: str
-    polish_status: str
+    polish_status: Literal["ok", "failed"]
     polished_questions: list[str]
-    # Topic phase yields {"text", "topic"} dicts; speech_act_node yields AnalyzedQuestion.
-    analyzed: list[AnalyzedQuestion] | list[dict[str, str]]
+    analyzed: list[AnalyzedQuestion]
     final_message: str

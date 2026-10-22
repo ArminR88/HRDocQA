@@ -56,23 +56,21 @@ def run_stage() -> dict:
 
     joined_count = 0
     skipped_count = 0
+    assembled_rows = []
 
-    with chunks_path.open("r", encoding="utf-8") as chunk_reader, assembled_path.open(
-        "w", encoding="utf-8", newline="\n"
-    ) as writer:
-        first = True
+    with chunks_path.open("r", encoding="utf-8") as chunk_reader:
         for line in chunk_reader:
             row = line.strip()
             chunk = json.loads(row)
             embedding_hit = embedding_map[chunk["id"]]
-            _, embedding_vector = embedding_hit
+            embedding_vector = embedding_hit[1]
             assembled = assemble_record(chunk=chunk, embedding=embedding_vector)
-            if first == False:
-                writer.write("\n")
             serialized = json.dumps(assembled, ensure_ascii=False, separators=(",", ":"))
-            writer.write(serialized)
-            first = False
+            assembled_rows.append(serialized)
             joined_count += 1
+
+    assembled_text = "\n".join(assembled_rows)
+    assembled_path.write_text(assembled_text, encoding="utf-8", newline="\n")
 
     elapsed_s = time.time() - start_time
     generated_at = datetime.now()

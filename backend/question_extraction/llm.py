@@ -4,7 +4,7 @@ from typing import Callable, Type, TypeVar
 
 from dotenv import load_dotenv
 from openai import OpenAI
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from .schema import JudgeVerdict
 
@@ -15,9 +15,6 @@ T = TypeVar("T", bound=BaseModel)
 MODEL = "deepseek-flash"
 BASE_URL = "https://api.deepseek.com"
 TEMPERATURE = 0
-FORMAT_FEEDBACK = "Output was not valid JSON for the required schema."
-
-
 def _call(system: str, user: str, model: str = MODEL) -> str:
     """
     Run a single JSON-mode chat completion.
@@ -128,21 +125,14 @@ def call_with_retry(
         (TopicOutput(topic='vacation'), True)
     """
     feedback = None
-    output = None
     for _ in range(max_attempts):
         user = user_builder(feedback)
         raw = _call(primary_system, user)
-        try:
-            output = _parse(raw, primary_schema)
-        except (json.JSONDecodeError, ValidationError):
-            output = None
-            format_criteria = ["FORMAT"]
-            feedback = _format_feedback(format_criteria, FORMAT_FEEDBACK)
-            continue
+        output = _parse(raw, primary_schema)
         judge_input = judge_input_builder(output)
         judge_raw = _call(judge_system, judge_input)
         verdict = _parse(judge_raw, JudgeVerdict)
-        if verdict.passed == True:
+        if verdict.passed:
             passed_result = (output, True)
             return passed_result
         feedback = _format_feedback(verdict.failed_criteria, verdict.feedback)

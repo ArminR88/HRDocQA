@@ -12,7 +12,6 @@ from .prompts import (
 )
 from .schema import (
     FIXED_FAILURE_MESSAGE,
-    SPEECH_ACTS,
     TOPICS,
     AnalyzedQuestion,
     PipelineState,
@@ -106,7 +105,7 @@ def _polish_query(raw_query: str) -> dict:
     """
     user_builder = partial(_build_user, "Raw query", raw_query)
     judge_input_builder = partial(_polish_judge_input, raw_query)
-    output, passed = call_with_retry(
+    retry_result = call_with_retry(
         POLISH_SYSTEM,
         POLISH_JUDGE_SYSTEM,
         user_builder,
@@ -114,13 +113,7 @@ def _polish_query(raw_query: str) -> dict:
         PolishedOutput,
         max_attempts=3,
     )
-    failure = {"polish_status": "failed", "polished_questions": []}
-    if passed == False:
-        return failure
-    if output.status != "ok":
-        return failure
-    if not output.questions:
-        return failure
+    output = retry_result[0]
     success = {}
     success["polish_status"] = "ok"
     success["polished_questions"] = output.questions
@@ -184,7 +177,7 @@ def _topic_for(question: str) -> str:
     """
     user_builder = partial(_build_user, "Question", question)
     judge_input_builder = partial(_topic_judge_input, question)
-    output, passed = call_with_retry(
+    retry_result = call_with_retry(
         TOPIC_SYSTEM,
         TOPIC_JUDGE_SYSTEM,
         user_builder,
@@ -192,57 +185,9 @@ def _topic_for(question: str) -> str:
         TopicOutput,
         max_attempts=3,
     )
-    if passed == False:
-        return "unidentified"
+    output = retry_result[0]
     topic = output.topic
-    if topic not in TOPICS:
-        return "unidentified"
     return topic
-
-
-def _label_topics(questions: list[str]) -> list[dict]:
-    """
-    Attach a topic to each question.
-
-    Arguments:
-        questions (list[str]): Polished questions.
-
-    Returns:
-        list[dict]: One {"text", "topic"} dict per question.
-
-    Example:
-        >>> _label_topics(["Is leave paid?"])
-        [{'text': 'Is leave paid?', 'topic': 'parental_leave'}]
-    """
-    labelled = []
-    for question in questions:
-        topic = _topic_for(question)
-        item = {"text": question, "topic": topic}
-        labelled.append(item)
-    return labelled
-
-
-def topic_node(state: PipelineState) -> dict:
-    """
-    Assign a topic to every polished question.
-
-    Arguments:
-        state (PipelineState): Current graph state with polished_questions set.
-
-    Returns:
-        dict: State update whose analyzed holds {"text", "topic"} dicts.
-
-    Example:
-        >>> topic_node({"polished_questions": ["Is leave paid?"]})
-        {'analyzed': [{'text': 'Is leave paid?', 'topic': 'parental_leave'}]}
-    """
-    questions = state["polished_questions"]
-    labelled = _label_topics(questions)
-    count = len(labelled)
-    logging.info("[node:topic] labelled %d questions", count)
-    update = {}
-    update["analyzed"] = labelled
-    return update
 
 
 def _speech_act_for(question: str) -> str:
@@ -264,53 +209,33 @@ def _speech_act_for(question: str) -> str:
     raw = _call(SPEECH_ACT_SYSTEM, user)
     output = _parse(raw, SpeechActOutput)
     speech_act = output.speech_act
-    if speech_act not in SPEECH_ACTS:
-        return "factual"
     return speech_act
 
 
-def _complete_analysis(labelled: list[dict]) -> list[AnalyzedQuestion]:
+def classify_node(state: PipelineState) -> dict:
     """
-    Build the full AnalyzedQuestion for each topic-labelled question.
+    Summary:
+        Classify the topic and speech act for every polished question.
 
     Arguments:
-        labelled (list[dict]): {"text", "topic"} dicts.
-
-    Returns:
-        list[AnalyzedQuestion]: One complete entry per question.
-
-    Example:
-        >>> _complete_analysis([{"text": "Is leave paid?", "topic": "parental_leave"}])
-        [AnalyzedQuestion(text='Is leave paid?', topic='parental_leave', speech_act='factual')]
-    """
-    analyzed = []
-    for item in labelled:
-        text = item["text"]
-        topic = item["topic"]
-        speech_act = _speech_act_for(text)
-        entry = AnalyzedQuestion(text=text, topic=topic, speech_act=speech_act)
-        analyzed.append(entry)
-    return analyzed
-
-
-def speech_act_node(state: PipelineState) -> dict:
-    """
-    Assign a speech act to every topic-labelled question.
-
-    Arguments:
-        state (PipelineState): Current graph state with analyzed topic dicts.
+        state (PipelineState): Current graph state with polished_questions set.
 
     Returns:
         dict: State update whose analyzed holds complete AnalyzedQuestion objects.
 
     Example:
-        >>> speech_act_node({"analyzed": [{"text": "Is leave paid?", "topic": "parental_leave"}]})
+        >>> classify_node({"polished_questions": ["Is leave paid?"]})
         {'analyzed': [AnalyzedQuestion(text='Is leave paid?', topic='parental_leave', speech_act='factual')]}
     """
-    labelled = state["analyzed"]
-    analyzed = _complete_analysis(labelled)
+    questions = state["polished_questions"]
+    analyzed = []
+    for question in questions:
+        topic = _topic_for(question)
+        speech_act = _speech_act_for(question)
+        entry = AnalyzedQuestion(text=question, topic=topic, speech_act=speech_act)
+        analyzed.append(entry)
     count = len(analyzed)
-    logging.info("[node:speech_act] classified %d questions", count)
+    logging.info("[node:classify] classified %d questions", count)
     update = {}
     update["analyzed"] = analyzed
     return update
