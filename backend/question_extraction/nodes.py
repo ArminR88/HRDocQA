@@ -13,11 +13,11 @@ from .prompts import (
 from .schema import (
     FIXED_FAILURE_MESSAGE,
     TOPICS,
-    AnalyzedQuestion,
-    PipelineState,
-    PolishedOutput,
-    SpeechActOutput,
-    TopicOutput,
+    Topic_Speech_Act_Labeled,
+    Question_Extraction_State,
+    Polished_Questions,
+    Speech_Act_Classification,
+    Topic_Classification,
 )
 
 
@@ -44,19 +44,19 @@ def _build_user(label: str, text: str, feedback: str | None) -> str:
     return user
 
 
-def _polish_judge_input(raw_query: str, output: PolishedOutput) -> str:
+def _polish_judge_input(raw_query: str, output: Polished_Questions) -> str:
     """
     Build the polish judge user message.
 
     Arguments:
         raw_query (str): Original user query.
-        output (PolishedOutput): Parsed polish output.
+        output (Polished_Questions): Parsed polish output.
 
     Returns:
         str: JSON text with the raw query and polished questions.
 
     Example:
-        >>> _polish_judge_input("Hi?", PolishedOutput(status="ok", questions=["Hi?"]))
+        >>> _polish_judge_input("Hi?", Polished_Questions(status="ok", questions=["Hi?"]))
         '{"raw_query": "Hi?", "polished_questions": ["Hi?"]}'
     """
     payload = {}
@@ -66,19 +66,19 @@ def _polish_judge_input(raw_query: str, output: PolishedOutput) -> str:
     return judge_input
 
 
-def _topic_judge_input(question: str, output: TopicOutput) -> str:
+def _topic_judge_input(question: str, output: Topic_Classification) -> str:
     """
     Build the topic judge user message.
 
     Arguments:
         question (str): Polished question.
-        output (TopicOutput): Parsed topic output.
+        output (Topic_Classification): Parsed topic output.
 
     Returns:
         str: JSON text with the question, allowed topics and assigned topic.
 
     Example:
-        >>> _topic_judge_input("Is leave paid?", TopicOutput(topic="parental_leave"))
+        >>> _topic_judge_input("Is leave paid?", Topic_Classification(topic="parental_leave"))
         '{"question": "Is leave paid?", "allowed_topics": [...], "assigned_topic": "parental_leave"}'
     """
     payload = {}
@@ -110,7 +110,7 @@ def _polish_query(raw_query: str) -> dict:
         POLISH_JUDGE_SYSTEM,
         user_builder,
         judge_input_builder,
-        PolishedOutput,
+        Polished_Questions,
         max_attempts=3,
     )
     output = retry_result[0]
@@ -120,12 +120,12 @@ def _polish_query(raw_query: str) -> dict:
     return success
 
 
-def polish_node(state: PipelineState) -> dict:
+def polish_node(state: Question_Extraction_State) -> dict:
     """
     Polish the raw query into standalone questions.
 
     Arguments:
-        state (PipelineState): Current graph state with raw_query set.
+        state (Question_Extraction_State): Current graph state with raw_query set.
 
     Returns:
         dict: State update with polish_status and polished_questions.
@@ -142,12 +142,12 @@ def polish_node(state: PipelineState) -> dict:
     return update
 
 
-def emit_fixed_message_node(state: PipelineState) -> dict:
+def emit_fixed_message_node(state: Question_Extraction_State) -> dict:
     """
     Emit the fixed failure message.
 
     Arguments:
-        state (PipelineState): Current graph state.
+        state (Question_Extraction_State): Current graph state.
 
     Returns:
         dict: State update with final_message set to FIXED_FAILURE_MESSAGE.
@@ -182,7 +182,7 @@ def _topic_for(question: str) -> str:
         TOPIC_JUDGE_SYSTEM,
         user_builder,
         judge_input_builder,
-        TopicOutput,
+        Topic_Classification,
         max_attempts=3,
     )
     output = retry_result[0]
@@ -207,35 +207,33 @@ def _speech_act_for(question: str) -> str:
     """
     user = f"Question:\n{question}"
     raw = _call(SPEECH_ACT_SYSTEM, user)
-    output = _parse(raw, SpeechActOutput)
+    output = _parse(raw, Speech_Act_Classification)
     speech_act = output.speech_act
     return speech_act
 
 
-def classify_node(state: PipelineState) -> dict:
+def classify_node(state: Question_Extraction_State) -> dict:
     """
     Summary:
         Classify the topic and speech act for every polished question.
 
     Arguments:
-        state (PipelineState): Current graph state with polished_questions set.
+        state (Question_Extraction_State): Current graph state with polished_questions set.
 
     Returns:
-        dict: State update whose analyzed holds complete AnalyzedQuestion objects.
+        dict: State update whose topic_speech_act_labeled holds complete Topic_Speech_Act_Labeled objects.
 
     Example:
         >>> classify_node({"polished_questions": ["Is leave paid?"]})
-        {'analyzed': [AnalyzedQuestion(text='Is leave paid?', topic='parental_leave', speech_act='factual')]}
+        {'topic_speech_act_labeled': [Topic_Speech_Act_Labeled(question='Is leave paid?', topic='parental_leave', speech_act='factual')]}
     """
     questions = state["polished_questions"]
-    analyzed = []
+    labeled_questions = []
     for question in questions:
         topic = _topic_for(question)
         speech_act = _speech_act_for(question)
-        entry = AnalyzedQuestion(text=question, topic=topic, speech_act=speech_act)
-        analyzed.append(entry)
-    count = len(analyzed)
+        entry = Topic_Speech_Act_Labeled(question=question, topic=topic, speech_act=speech_act)
+        labeled_questions.append(entry)
+    count = len(labeled_questions)
     logging.info("[node:classify] classified %d questions", count)
-    update = {}
-    update["analyzed"] = analyzed
-    return update
+    return {"topic_speech_act_labeled": labeled_questions}

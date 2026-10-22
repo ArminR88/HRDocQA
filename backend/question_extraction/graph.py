@@ -1,15 +1,15 @@
 from langgraph.graph import END, START, StateGraph
 
 from .nodes import classify_node, emit_fixed_message_node, polish_node
-from .schema import PipelineState
+from .schema import Question_Extraction_State
 
 
-def _route_after_polish(state: PipelineState) -> str:
+def _route_after_polish(state: Question_Extraction_State) -> str:
     """
     Route from polish to classification or to the failure message.
 
     Arguments:
-        state (PipelineState): Current graph state with polish_status set.
+        state (Question_Extraction_State): Current graph state with polish_status set.
 
     Returns:
         str: Next node name, either "classify" or "emit_failure".
@@ -31,13 +31,13 @@ def build_extraction_graph():
         None
 
     Returns:
-        CompiledStateGraph: Compiled graph over PipelineState.
+        CompiledStateGraph: Compiled graph over Question_Extraction_State.
 
     Example:
         >>> build_extraction_graph().invoke({"raw_query": "How do I request leave?"})
-        {'raw_query': '...', 'polish_status': 'ok', 'analyzed': [...]}
+        {'raw_query': '...', 'polish_status': 'ok', 'topic_speech_act_labeled': [...]}
     """
-    graph = StateGraph(PipelineState)
+    graph = StateGraph(Question_Extraction_State)
     graph.add_node("polish", polish_node)
     graph.add_node("emit_failure", emit_fixed_message_node)
     graph.add_node("classify", classify_node)

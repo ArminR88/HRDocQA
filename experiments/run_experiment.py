@@ -31,20 +31,20 @@ def _run_query(graph: Any, query: dict[str, Any]) -> dict[str, Any]:
     query_id = query["id"]
     raw_query = query["raw_query"]
     state = graph.invoke({"raw_query": raw_query})
-    analyzed_state = state["analyzed"]
-    analyzed = []
-    for item in analyzed_state:
-        analyzed_item = {}
-        analyzed_item["text"] = item.text
-        analyzed_item["topic"] = item.topic
-        analyzed_item["speech_act"] = item.speech_act
-        analyzed.append(analyzed_item)
+    labeled_questions_state = state["topic_speech_act_labeled"]
+    labeled_questions = []
+    for item in labeled_questions_state:
+        labeled_question = {}
+        labeled_question["question"] = item.question
+        labeled_question["topic"] = item.topic
+        labeled_question["speech_act"] = item.speech_act
+        labeled_questions.append(labeled_question)
     row = {}
     row["id"] = query_id
     row["raw_query"] = raw_query
     row["polish_status"] = state["polish_status"]
     row["polished_questions"] = state["polished_questions"]
-    row["analyzed"] = analyzed
+    row["topic_speech_act_labeled"] = labeled_questions
     row["final_message"] = state.get("final_message")
     row["error"] = None
     return row

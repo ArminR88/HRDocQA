@@ -4,7 +4,7 @@ from pathlib import Path
 
 from sentence_transformers import SentenceTransformer
 
-from .schema import EMBEDDING_MODEL, MIN_SIMILARITY, RetrievedChunk, TOP_K
+from .schema import EMBEDDING_MODEL, MIN_SIMILARITY, Retrieval_Chunk, TOP_K
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INDEX_PATH = sorted(PROJECT_ROOT.glob("output_knowledge_base/*/kb_index.jsonl"))[-1]
@@ -55,7 +55,7 @@ def _cosine_similarity(query_vector: list[float], chunk_vector: list[float]) -> 
     return score
 
 
-def retrieve_top_k(query_vector: list[float], k: int = TOP_K) -> list[RetrievedChunk]:
+def retrieve_top_k(query_vector: list[float], k: int = TOP_K) -> list[Retrieval_Chunk]:
     """Summary: Return the highest-scoring indexed chunks above the threshold.
 
     Arguments:
@@ -77,7 +77,7 @@ def retrieve_top_k(query_vector: list[float], k: int = TOP_K) -> list[RetrievedC
     ranked_rows = sorted(matching_rows, key=lambda item: item[1], reverse=True)
     selected_rows = ranked_rows[:k]
     chunks = [
-        RetrievedChunk(
+        Retrieval_Chunk(
             chunk_id=selected_row[0]["id"],
             file=selected_row[0]["source_path"],
             text=selected_row[0]["text"],

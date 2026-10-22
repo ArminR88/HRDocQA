@@ -14,7 +14,7 @@ def run(raw_query):
 
     Example:
         >>> run("How many vacation days do I have?")
-        {'analyzed': [...], 'final_message': None}
+        {'topic_speech_act_labeled': [...], 'final_message': None}
     """
     extraction_state = {}
     extraction_state["raw_query"] = raw_query
@@ -22,7 +22,7 @@ def run(raw_query):
     extraction = extraction_graph.invoke(extraction_state)
     answer_state = {}
     answer_state["raw_query"] = raw_query
-    answer_state["analyzed"] = extraction["analyzed"]
+    answer_state["topic_speech_act_labeled"] = extraction["topic_speech_act_labeled"]
     answer_state["final_message"] = extraction.get("final_message")
     answer_graph = build_answer_graph()
     result = answer_graph.invoke(answer_state)

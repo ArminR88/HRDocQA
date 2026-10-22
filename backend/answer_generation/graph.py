@@ -33,14 +33,14 @@ def _route_after_retrieval(state: AnswerState) -> list[str]:
         state: Pipeline state with retrieval case markers.
 
     Returns:
-        Branch names needed to process the analyzed questions.
+        Branch names needed to process the labeled questions.
 
     Example:
-        >>> _route_after_retrieval({"analyzed": [...]})
+        >>> _route_after_retrieval({"topic_speech_act_labeled": [...]})
         ["answer", "no_match"]
     """
-    analyzed = state["analyzed"]
-    cases = [question["case"] for question in analyzed]
+    labeled_questions = state["topic_speech_act_labeled"]
+    cases = [question["case"] for question in labeled_questions]
     routes = []
     if any(case == "retrieved" for case in cases):
         routes.append("answer")
@@ -60,7 +60,7 @@ def build_answer_graph():
 
     Example:
         >>> build_answer_graph().invoke({"raw_query": "How do I request leave?"})
-        {"analyzed": [...], "final_message": "..."}
+        {"topic_speech_act_labeled": [...], "final_message": "..."}
     """
     graph = StateGraph(AnswerState)
     graph.add_node("analysis", build_extraction_graph())

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel
 
-from .schema import JudgeVerdict
+from .schema import Question_Extraction_Judge_Output
 
 load_dotenv()
 
@@ -62,8 +62,8 @@ def _parse(raw: str, schema: Type[T]) -> T:
         T: Instance of the given schema.
 
     Example:
-        >>> _parse('{"topic": "vacation"}', TopicOutput)
-        TopicOutput(topic='vacation')
+        >>> _parse('{"topic": "vacation"}', Topic_Classification)
+        Topic_Classification(topic='vacation')
     """
     data = json.loads(raw)
     parsed = schema.model_validate(data)
@@ -121,8 +121,8 @@ def call_with_retry(
             otherwise (last_output, False) after max_attempts attempts.
 
     Example:
-        >>> call_with_retry(TOPIC_SYSTEM, TOPIC_JUDGE_SYSTEM, build_user, build_judge, TopicOutput)
-        (TopicOutput(topic='vacation'), True)
+        >>> call_with_retry(TOPIC_SYSTEM, TOPIC_JUDGE_SYSTEM, build_user, build_judge, Topic_Classification)
+        (Topic_Classification(topic='vacation'), True)
     """
     feedback = None
     for _ in range(max_attempts):
@@ -131,7 +131,7 @@ def call_with_retry(
         output = _parse(raw, primary_schema)
         judge_input = judge_input_builder(output)
         judge_raw = _call(judge_system, judge_input)
-        verdict = _parse(judge_raw, JudgeVerdict)
+        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
         if verdict.passed:
             passed_result = (output, True)
             return passed_result

@@ -8,7 +8,7 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 ANSWER_FAILURE_MESSAGE = "HRDocQA cannot provide an answer this time."
 
 
-class RetrievedChunk(BaseModel):
+class Retrieval_Chunk(BaseModel):
     chunk_id: str
     file: str
     text: str
@@ -30,7 +30,7 @@ class AnswerState(TypedDict, total=False):
     raw_query: str
     polish_status: str
     polished_questions: list[str]
-    analyzed: list[dict[str, Any]]
+    topic_speech_act_labeled: list[dict[str, Any]]
     final_message: str
     answer_results: list[dict[str, Any]]
     no_match_results: list[dict[str, Any]]
