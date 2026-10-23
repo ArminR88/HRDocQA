@@ -1,8 +1,12 @@
 import json
 import logging
-from functools import partial
 
-from .llm import _call, _parse, call_with_retry
+from .llm import (
+    _call,
+    _format_feedback,
+    _parse,
+    _prepend_heading_to_question,
+)
 from .prompts import (
     POLISH_JUDGE_SYSTEM,
     POLISH_SYSTEM,
@@ -11,8 +15,8 @@ from .prompts import (
     TOPIC_SYSTEM,
 )
 from .schema import (
-    FIXED_FAILURE_MESSAGE,
-    TOPICS,
+    Question_Extraction_Judge_Output,
+    TOPICS as ALLOWED_TOPICS,
     Topic_Speech_Act_Labeled,
     Question_Extraction_State,
     Polished_Questions,
@@ -21,75 +25,84 @@ from .schema import (
 )
 
 
-def _build_user(label: str, text: str, feedback: str | None) -> str:
+def _build_polish_judge_message(
+    raw_query: str,
+    polished: Polished_Questions,
+) -> str:
     """
-    Build a primary user message, appending retry feedback when present.
+    Build the comparison payload for the polish judge.
 
-    Arguments:
-        label (str): Heading for the text, e.g. "Question".
-        text (str): Raw query or question.
-        feedback (str | None): None on the first attempt, else retry feedback.
-
-    Returns:
-        str: User message.
-
-    Example:
-        >>> _build_user("Question", "Is leave paid?", None)
-        'Question:\\nIs leave paid?'
-    """
-    base = f"{label}:\n{text}"
-    if feedback is None:
-        return base
-    user = f"{base}\n\n{feedback}"
-    return user
-
-
-def _polish_judge_input(raw_query: str, output: Polished_Questions) -> str:
-    """
-    Build the polish judge user message.
+    The payload carries the raw query and the polished questions so the judge
+    can compare them.
 
     Arguments:
         raw_query (str): Original user query.
-        output (Polished_Questions): Parsed polish output.
+        polished (Polished_Questions): Parsed polish output.
 
     Returns:
         str: JSON text with the raw query and polished questions.
 
     Example:
-        >>> _polish_judge_input("Hi?", Polished_Questions(status="ok", questions=["Hi?"]))
-        '{"raw_query": "Hi?", "polished_questions": ["Hi?"]}'
+        >>> _build_polish_judge_message(
+        ...     "hi im [PERSON_NAME] emp id [EMPLOYEE_ID], how many wks parental leave r paid n can i split it?",
+        ...     Polished_Questions(
+        ...         status="ok",
+        ...         questions=[
+        ...             "How many weeks of parental leave are paid?",
+        ...             "Can parental leave be split?",
+        ...         ],
+        ...     ),
+        ... )
+        '{"raw_query": "hi im [PERSON_NAME] emp id [EMPLOYEE_ID], how many wks parental leave r paid n can i split it?", "polished_questions": ["How many weeks of parental leave are paid?", "Can parental leave be split?"]}'
     """
+    # Collect the raw query and the polished questions for comparison.
     payload = {}
     payload["raw_query"] = raw_query
-    payload["polished_questions"] = output.questions
-    judge_input = json.dumps(payload)
-    return judge_input
+    payload["polished_questions"] = polished.questions
+
+    # Serialize the payload as JSON for the judge.
+    comparison_payload = json.dumps(payload)
+
+    return comparison_payload
 
 
-def _topic_judge_input(question: str, output: Topic_Classification) -> str:
+def _build_topic_judge_message(
+    polished_question: str,
+    topic: Topic_Classification,
+) -> str:
     """
-    Build the topic judge user message.
+    Build the comparison payload for the topic judge.
+
+    The payload carries the polished question, the allowed topics, and the
+    assigned topic so the judge can compare them.
 
     Arguments:
-        question (str): Polished question.
-        output (Topic_Classification): Parsed topic output.
+        polished_question (str): Polished question.
+        topic (Topic_Classification): Parsed topic output.
 
     Returns:
-        str: JSON text with the question, allowed topics and assigned topic.
+        str: JSON text with the question, allowed topics, and assigned topic.
 
     Example:
-        >>> _topic_judge_input("Is leave paid?", Topic_Classification(topic="parental_leave"))
-        '{"question": "Is leave paid?", "allowed_topics": [...], "assigned_topic": "parental_leave"}'
+        >>> _build_topic_judge_message(
+        ...     "Can I split my parental leave into two blocks?",
+        ...     Topic_Classification(topic="parental_leave"),
+        ... )
+        '{"question": "Can I split my parental leave into two blocks?", "allowed_topics": ["vacation", "employee_change", "parental_leave", "unidentified"], "assigned_topic": "parental_leave"}'
     """
+    # Collect the polished question, allowed topics, and assigned topic.
     payload = {}
-    payload["question"] = question
-    payload["allowed_topics"] = TOPICS
-    payload["assigned_topic"] = output.topic
-    judge_input = json.dumps(payload)
-    return judge_input
+    payload["question"] = polished_question
+    payload["allowed_topics"] = ALLOWED_TOPICS
+    payload["assigned_topic"] = topic.topic
+
+    # Serialize the payload as JSON for the judge.
+    comparison_payload = json.dumps(payload)
+
+    return comparison_payload
 
 
-def _polish_query(raw_query: str) -> dict:
+def _polish_raw_query_with_judge(raw_query: str) -> dict:
     """
     Polish a raw query with retry and judge.
 
@@ -100,27 +113,56 @@ def _polish_query(raw_query: str) -> dict:
         dict: State update with polish_status and polished_questions.
 
     Example:
-        >>> _polish_query("How do I request leave?")
-        {'polish_status': 'ok', 'polished_questions': ['How do I request leave?']}
+        >>> _polish_raw_query_with_judge("hi how do i req leave n is it paid")
+        {'polish_status': 'ok', 'polished_questions': ['How do I request leave?', 'Is leave paid?']}
     """
-    user_builder = partial(_build_user, "Raw query", raw_query)
-    judge_input_builder = partial(_polish_judge_input, raw_query)
-    retry_result = call_with_retry(
-        POLISH_SYSTEM,
-        POLISH_JUDGE_SYSTEM,
-        user_builder,
-        judge_input_builder,
-        Polished_Questions,
-        max_attempts=3,
-    )
-    output = retry_result[0]
-    success = {}
-    success["polish_status"] = "ok"
-    success["polished_questions"] = output.questions
-    return success
+    # Start with no feedback for the first attempt.
+    feedback = None
+
+    # Track whether the judge passed the polish output.
+    passed = False
+
+    for _ in range(3):
+        # Build the generator user message and call the polish prompt.
+        user_message = _prepend_heading_to_question("Raw query", raw_query, feedback)
+        raw_output = _call(POLISH_SYSTEM, user_message)
+
+        # Parse the generator output into the polish schema.
+        polished = _parse(raw_output, Polished_Questions)
+
+        # Build the judge message from the raw query and the polished output.
+        judge_message = _build_polish_judge_message(raw_query, polished)
+
+        # Call the judge and parse its verdict.
+        judge_raw = _call(POLISH_JUDGE_SYSTEM, judge_message)
+        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+
+        # Stop when the judge passes the output.
+        if verdict.passed == True:
+            passed = True
+            break
+
+        # Otherwise, format the feedback for the next attempt.
+        feedback = _format_feedback(verdict.failed_criteria, verdict.feedback)
+
+    # Mark the result successful only when the judge passed it.
+    polish_status = "failed"
+    if passed == True:
+        polish_status = "ok"
+
+    # Preserve an explicit failure status from the polish output.
+    if polished.status == "failed":
+        polish_status = "failed"
+
+    # Build the state update.
+    state_update = {}
+    state_update["polish_status"] = polish_status
+    state_update["polished_questions"] = polished.questions
+
+    return state_update
 
 
-def polish_node(state: Question_Extraction_State) -> dict:
+def question_polish_node(state: Question_Extraction_State) -> dict:
     """
     Polish the raw query into standalone questions.
 
@@ -131,109 +173,152 @@ def polish_node(state: Question_Extraction_State) -> dict:
         dict: State update with polish_status and polished_questions.
 
     Example:
-        >>> polish_node({"raw_query": "How do I request leave?"})
-        {'polish_status': 'ok', 'polished_questions': ['How do I request leave?']}
+        >>> question_polish_node({"raw_query": "hi how do i req leave n is it paid"})
+        {'polish_status': 'ok', 'polished_questions': ['How do I request leave?', 'Is leave paid?']}
     """
+    # Read the raw query from the state.
     raw_query = state["raw_query"]
-    update = _polish_query(raw_query)
-    status = update["polish_status"]
-    count = len(update["polished_questions"])
-    logging.info("[node:polish] status=%s questions=%d", status, count)
-    return update
+
+    # Run the polish step.
+    polish_result = _polish_raw_query_with_judge(raw_query)
+
+    # Log a concise summary of the node result.
+    status = polish_result["polish_status"]
+    count = len(polish_result["polished_questions"])
+    logging.info("[node:question_polish] status=%s questions=%d", status, count)
+
+    return polish_result
 
 
-def emit_fixed_message_node(state: Question_Extraction_State) -> dict:
+def _classify_question_topic(
+    polished_question: str,
+    max_attempts: int = 3,
+) -> str:
     """
-    Emit the fixed failure message.
+    Classify one polished question's topic with retry and judge.
 
     Arguments:
-        state (Question_Extraction_State): Current graph state.
+        polished_question (str): The polished question to classify.
+        max_attempts (int): Maximum number of judge attempts (default: 3).
 
     Returns:
-        dict: State update with final_message set to FIXED_FAILURE_MESSAGE.
+        str: Label from ALLOWED_TOPICS; `unidentified`
+            when every attempt fails the judge.
 
     Example:
-        >>> emit_fixed_message_node({"polish_status": "failed"})
-        {'final_message': 'Sorry HRDocQA cannot polish the question.'}
-    """
-    update = {}
-    update["final_message"] = FIXED_FAILURE_MESSAGE
-    return update
-
-
-def _topic_for(question: str) -> str:
-    """
-    Classify one question's topic with retry and judge.
-
-    Arguments:
-        question (str): Polished question.
-
-    Returns:
-        str: Label from TOPICS; "unidentified" on judge failure or invalid label.
-
-    Example:
-        >>> _topic_for("How many vacation days do I have?")
+        >>> _classify_question_topic("How many vacation days do I have?")
         'vacation'
     """
-    user_builder = partial(_build_user, "Question", question)
-    judge_input_builder = partial(_topic_judge_input, question)
-    retry_result = call_with_retry(
-        TOPIC_SYSTEM,
-        TOPIC_JUDGE_SYSTEM,
-        user_builder,
-        judge_input_builder,
-        Topic_Classification,
-        max_attempts=3,
-    )
-    output = retry_result[0]
-    topic = output.topic
-    return topic
+    # Start with no feedback for the first attempt.
+    feedback = None
+
+    # Keep the unidentified fallback unless the judge accepts a topic.
+    classified_topic = "unidentified"
+
+    # Track whether the judge accepted a topic output.
+    passed = False
+
+    for _ in range(max_attempts):
+        # Build the generator user message and call the topic prompt.
+        user_message = _prepend_heading_to_question("Question", polished_question, feedback)
+        raw_output = _call(TOPIC_SYSTEM, user_message)
+
+        # Parse the generator output into the topic schema.
+        topic_output = _parse(raw_output, Topic_Classification)
+
+        # Build the judge message from the question and the topic output.
+        judge_message = _build_topic_judge_message(polished_question, topic_output)
+
+        # Call the judge and parse its verdict.
+        judge_raw = _call(TOPIC_JUDGE_SYSTEM, judge_message)
+        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+
+        # Stop when the judge passes the output.
+        if verdict.passed == True:
+            passed = True
+            break
+
+        # Otherwise, format the feedback for the next attempt.
+        feedback = _format_feedback(verdict.failed_criteria, verdict.feedback)
+
+    # Use the topic only when the judge accepted it.
+    if passed == True:
+        classified_topic = topic_output.topic
+
+    return classified_topic
 
 
-def _speech_act_for(question: str) -> str:
+def _classify_question_speech_act(polished_question: str) -> str:
     """
-    Classify one question's speech act with a single call, no judge or retry.
+    Classify one polished question's speech act with a single call.
+
+    No judge and no retry; a response that cannot be parsed raises.
 
     Arguments:
-        question (str): Polished question.
+        polished_question (str): The polished question to classify.
 
     Returns:
-        str: The returned value if in SPEECH_ACTS, otherwise "factual".
-            A response that cannot be parsed raises.
+        str: The speech-act label returned by the model.
 
     Example:
-        >>> _speech_act_for("How do I request leave?")
+        >>> _classify_question_speech_act("How do I request leave?")
         'instruction'
     """
-    user = f"Question:\n{question}"
-    raw = _call(SPEECH_ACT_SYSTEM, user)
-    output = _parse(raw, Speech_Act_Classification)
-    speech_act = output.speech_act
-    return speech_act
+    # Build the generator user message.
+    user_message = _prepend_heading_to_question("Question", polished_question, None)
+
+    # Call the speech-act prompt once.
+    raw_output = _call(SPEECH_ACT_SYSTEM, user_message)
+
+    # Parse the raw response into the speech-act schema.
+    speech_act_output = _parse(raw_output, Speech_Act_Classification)
+
+    # Return the assigned speech-act label.
+    classified_speech_act = speech_act_output.speech_act
+
+    return classified_speech_act
 
 
-def classify_node(state: Question_Extraction_State) -> dict:
+def topic_and_speech_act_node(state: Question_Extraction_State) -> dict:
     """
-    Summary:
-        Classify the topic and speech act for every polished question.
+    Description: Assign a topic and speech act to every polished question.
 
     Arguments:
-        state (Question_Extraction_State): Current graph state with polished_questions set.
+        state (Question_Extraction_State): Current graph state with
+            polished_questions set.
 
     Returns:
-        dict: State update whose topic_speech_act_labeled holds complete Topic_Speech_Act_Labeled objects.
+        dict: State update whose topic_speech_act_labeled holds one
+            Topic_Speech_Act_Labeled per question.
 
     Example:
-        >>> classify_node({"polished_questions": ["Is leave paid?"]})
-        {'topic_speech_act_labeled': [Topic_Speech_Act_Labeled(question='Is leave paid?', topic='parental_leave', speech_act='factual')]}
+        >>> topic_and_speech_act_node({"polished_questions": ["How do I request leave?", "Is leave paid?"]})
+        {'topic_speech_act_labeled': [Topic_Speech_Act_Labeled(question='How do I request leave?', topic='unidentified', speech_act='instruction'), Topic_Speech_Act_Labeled(question='Is leave paid?', topic='parental_leave', speech_act='factual')]}
     """
-    questions = state["polished_questions"]
+    # Read the polished questions from the state.
+    polished_questions = state["polished_questions"]
+
+    # Label each question with its topic and speech act.
     labeled_questions = []
-    for question in questions:
-        topic = _topic_for(question)
-        speech_act = _speech_act_for(question)
-        entry = Topic_Speech_Act_Labeled(question=question, topic=topic, speech_act=speech_act)
-        labeled_questions.append(entry)
-    count = len(labeled_questions)
-    logging.info("[node:classify] classified %d questions", count)
-    return {"topic_speech_act_labeled": labeled_questions}
+    for polished_question in polished_questions:
+        classified_topic = _classify_question_topic(polished_question)
+        classified_speech_act = _classify_question_speech_act(polished_question)
+        labeled_question = Topic_Speech_Act_Labeled(
+            question=polished_question,
+            topic=classified_topic,
+            speech_act=classified_speech_act,
+        )
+        labeled_questions.append(labeled_question)
+
+    # Log a concise summary of the node result.
+    question_count = len(labeled_questions)
+    logging.info(
+        "[node:topic_and_speech_act] classified %d questions",
+        question_count,
+    )
+
+    # Build the state update.
+    state_update = {}
+    state_update["topic_speech_act_labeled"] = labeled_questions
+
+    return state_update

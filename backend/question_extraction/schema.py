@@ -4,8 +4,6 @@ from pydantic import BaseModel, Field
 
 TOPICS = ["vacation", "employee_change", "parental_leave", "unidentified"]
 SPEECH_ACTS = ["instruction", "factual"]
-FIXED_FAILURE_MESSAGE = "Sorry HRDocQA cannot polish the question."
-
 class Polished_Questions(BaseModel):
     """
     Description:
@@ -69,7 +67,7 @@ class Topic_Speech_Act_Labeled(BaseModel):
     """
     Description:
         One polished question with its topic and speech-act labels. The unit
-        produced by classify_node and stored in
+        produced by topic_and_speech_act_node and stored in
         Question_Extraction_State.topic_speech_act_labeled.
 
     Arguments:
@@ -95,7 +93,7 @@ class Question_Extraction_State(TypedDict, total=False):
         polished_questions (list[str]): standalone questions produced by the
             polish stage.
         topic_speech_act_labeled (list[Topic_Speech_Act_Labeled]): classified
-            questions produced by classify_node.
+            questions produced by topic_and_speech_act_node.
         final_message (str): fixed failure text, set only on the failure branch.
     """
     raw_query: str

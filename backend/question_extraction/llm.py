@@ -94,47 +94,120 @@ def _format_feedback(failed_criteria: list[str], feedback: str) -> str:
     return text
 
 
+def _prepend_heading_to_question(
+    heading: str,
+    question: str,
+    retry_feedback: str | None,
+) -> str:
+    """
+    Prepend a heading to a question, appending retry feedback when present.
+
+    Arguments:
+        heading (str): Heading placed above the question, e.g. "Raw query".
+        question (str): The user question to send, raw or polished.
+        retry_feedback (str | None): None on the first attempt, else the
+            judge feedback to append.
+
+    Returns:
+        str: User message.
+
+    Example:
+        >>> _prepend_heading_to_question("Raw query", "hi i wanna know abt parental leave n how many wks r paid?? also can i split it", None)
+        'Raw query:\\nhi i wanna know abt parental leave n how many wks r paid?? also can i split it'
+
+        >>> _prepend_heading_to_question("Question", "How many weeks of parental leave are paid?", "Fix P1.")
+        'Question:\\nHow many weeks of parental leave are paid?\\n\\nFix P1.'
+
+        >>> _prepend_heading_to_question("", '{"question": "Is leave paid?"}', None)
+        '{"question": "Is leave paid?"}'
+    """
+    # Add a heading when one is provided.
+    if heading == "":
+        headed_question = question
+    else:
+        headed_question = f"{heading}:\n{question}"
+
+    # Return the headed question when there is no retry feedback.
+    if retry_feedback is None:
+        return headed_question
+
+    # Append retry feedback after a blank line.
+    user_message = f"{headed_question}\n\n{retry_feedback}"
+    return user_message
+
+
 def call_with_retry(
-    primary_system: str,
-    judge_system: str,
-    user_builder: Callable[[str | None], str],
-    judge_input_builder: Callable[[T], str],
-    primary_schema: Type[T],
+    generator_system_prompt: str,
+    judge_system_prompt: str,
+    label: str,
+    text: str,
+    judge_input_builder: Callable[[str, T], str],
+    output_schema: Type[T],
     max_attempts: int = 3,
 ) -> tuple[T | None, bool]:
     """
-    Call a primary prompt and judge each result, retrying with judge feedback.
+    Call a generator prompt and judge each result, retrying with judge feedback.
 
     Arguments:
-        primary_system (str): System prompt of the primary call.
-        judge_system (str): System prompt of the judge call.
-        user_builder (Callable[[str | None], str]): Builds the primary user
-            message from feedback. Receives None on the first attempt and, on
-            retries, a string with the judge's failed criteria and feedback.
-        judge_input_builder (Callable[[T], str]): Builds the judge user message
-            from the parsed primary output.
-        primary_schema (Type[T]): Pydantic model the primary output is parsed into.
-        max_attempts (int): Maximum number of primary attempts.
+        generator_system_prompt (str): System prompt of the generator call.
+        judge_system_prompt (str): System prompt of the judge call.
+        label (str): Heading for the generator user message, e.g. "Raw query".
+        text (str): The query or question being processed.
+        judge_input_builder (Callable[[str, T], str]): Builds the judge user
+            message from the original text and the parsed generator output.
+        output_schema (Type[T]): Pydantic model the generator output is parsed into.
+        max_attempts (int): Maximum number of generator attempts.
 
     Returns:
-        tuple[T | None, bool]: (output, True) on the first judged pass,
-            otherwise (last_output, False) after max_attempts attempts.
+        tuple[T | None, bool]: (output, True) on a judged pass, otherwise
+            (last_output, False) after max_attempts attempts.
 
     Example:
-        >>> call_with_retry(TOPIC_SYSTEM, TOPIC_JUDGE_SYSTEM, build_user, build_judge, Topic_Classification)
-        (Topic_Classification(topic='vacation'), True)
+        >>> call_with_retry(
+        ...     POLISH_SYSTEM,
+        ...     POLISH_JUDGE_SYSTEM,
+        ...     "Raw query",
+        ...     "hi how do i req leave",
+        ...     _build_polish_comparison_payload,
+        ...     Polished_Questions,
+        ... )
+        (Polished_Questions(status='ok', questions=['How do I request leave?']), True)
     """
+    # Start with no feedback for the first attempt.
     feedback = None
+
+    # Track whether the judge passed the last output.
+    passed = False
+
     for _ in range(max_attempts):
-        user = user_builder(feedback)
-        raw = _call(primary_system, user)
-        output = _parse(raw, primary_schema)
-        judge_input = judge_input_builder(output)
-        judge_raw = _call(judge_system, judge_input)
-        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
-        if verdict.passed:
-            passed_result = (output, True)
-            return passed_result
-        feedback = _format_feedback(verdict.failed_criteria, verdict.feedback)
-    failed_result = (output, False)
-    return failed_result
+        # Build the generator message and call the generator prompt.
+        user_message = _prepend_heading_to_question(label, text, feedback)
+        raw_output = _call(generator_system_prompt, user_message)
+
+        # Parse the generator output into the expected schema.
+        parsed_output = _parse(raw_output, output_schema)
+
+        # Build the judge message from the original text and parsed output.
+        judge_message = judge_input_builder(text, parsed_output)
+
+        # Call the judge and parse its verdict.
+        judge_raw_output = _call(judge_system_prompt, judge_message)
+        verdict = _parse(
+            judge_raw_output,
+            Question_Extraction_Judge_Output,
+        )
+
+        # Stop when the judge passes the output.
+        if verdict.passed == True:
+            passed = True
+            break
+
+        # Format feedback for the next generator attempt.
+        feedback = _format_feedback(
+            verdict.failed_criteria,
+            verdict.feedback,
+        )
+
+    # Return the final output and whether the judge passed it.
+    retry_result = (parsed_output, passed)
+    return retry_result

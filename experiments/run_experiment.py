@@ -8,7 +8,7 @@ from backend.question_extraction.llm import MODEL
 
 ROOT = Path(__file__).resolve().parent.parent
 QUERY_PATH = ROOT / "experiments" / "experiment_queries.json"
-RESULT_PATH = ROOT / "experiments" / "experiment_results.json"
+RESULT_PATH = ROOT / "experiments" / "question_extraction_results.json"
 MAX_ATTEMPTS = 3
 EXPERIMENT_NAME = "baseline_v1"
 
@@ -31,7 +31,13 @@ def _run_query(graph: Any, query: dict[str, Any]) -> dict[str, Any]:
     query_id = query["id"]
     raw_query = query["raw_query"]
     state = graph.invoke({"raw_query": raw_query})
-    labeled_questions_state = state["topic_speech_act_labeled"]
+
+    # Read extraction outputs, defaulting missing failure-path fields.
+    polish_status = state.get("polish_status")
+    polished_questions = state.get("polished_questions", [])
+    labeled_questions_state = state.get("topic_speech_act_labeled", [])
+
+    # Convert labeled question models to result dictionaries.
     labeled_questions = []
     for item in labeled_questions_state:
         labeled_question = {}
@@ -42,8 +48,8 @@ def _run_query(graph: Any, query: dict[str, Any]) -> dict[str, Any]:
     row = {}
     row["id"] = query_id
     row["raw_query"] = raw_query
-    row["polish_status"] = state["polish_status"]
-    row["polished_questions"] = state["polished_questions"]
+    row["polish_status"] = polish_status
+    row["polished_questions"] = polished_questions
     row["topic_speech_act_labeled"] = labeled_questions
     row["final_message"] = state.get("final_message")
     row["error"] = None

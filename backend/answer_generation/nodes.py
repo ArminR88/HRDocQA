@@ -1,5 +1,4 @@
 import json
-from functools import partial
 from typing import Any
 
 from backend.question_extraction.llm import call_with_retry
@@ -62,70 +61,57 @@ def retrieval_node(state: AnswerState) -> dict[str, Any]:
     return update
 
 
-def _answer_user(
-    question: str,
+def _build_answer_generator_message(
+    question_text: str,
     speech_act: str,
     chunks: list[Retrieval_Chunk],
-    feedback: str | None,
 ) -> str:
-    """Summary: Build the answer model's user message.
+    """Build the generator message for one answer attempt.
 
     Arguments:
-        question: Question to answer.
-        speech_act: Classified speech act.
-        chunks: Retrieved evidence chunks.
-        feedback: Judge feedback from a prior attempt, if any.
+        question_text: The question being answered.
+        speech_act: "instruction" or "factual".
+        chunks: Retrieved chunks supplying the evidence.
 
     Returns:
-        JSON user message with question context and evidence.
-
-    Example:
-        >>> _answer_user("Is leave paid?", "factual", [], None)
-        '{"question": "Is leave paid?", ...}'
+        JSON string sent to the answer generator.
     """
-    payload = {
-        "question": question,
-        "speech_act": speech_act,
-        "retrieved_chunks": [chunk.model_dump() for chunk in chunks],
-    }
-    base_message = json.dumps(payload)
-    if feedback is None:
-        user_message = base_message
-    else:
-        user_message = f"{base_message}\n\n{feedback}"
-    return user_message
+    # Collect the question, speech act, and retrieved chunks.
+    payload = {}
+    payload["question"] = question_text
+    payload["speech_act"] = speech_act
+    payload["retrieved_chunks"] = [chunk.model_dump() for chunk in chunks]
+
+    # Serialize the generator message as JSON.
+    generator_message = json.dumps(payload)
+    return generator_message
 
 
 def _answer_judge_input(
-    question: str,
-    speech_act: str,
-    chunks: list[Retrieval_Chunk],
+    generator_context: str,
     output: CitedAnswer,
 ) -> str:
     """Summary: Build the answer judge's input from evidence and model output.
 
     Arguments:
-        question: Question being answered.
-        speech_act: Classified speech act.
-        chunks: Retrieved evidence chunks.
+        generator_context: JSON context passed to the answer generator.
         output: Candidate answer and citations.
 
     Returns:
         JSON judge input.
 
     Example:
-        >>> _answer_judge_input("Is leave paid?", "factual", [], CitedAnswer(answer="Yes.", cited_chunk_ids=["x"]))
+        >>> _answer_judge_input('{"question": "Is leave paid?", "speech_act": "factual", "retrieved_chunks": []}', CitedAnswer(answer="Yes.", cited_chunk_ids=["x"]))
         '{"question": "Is leave paid?", ...}'
     """
-    payload = {
-        "question": question,
-        "speech_act": speech_act,
-        "retrieved_chunks": [chunk.model_dump() for chunk in chunks],
-        "answer": output.answer,
-        "cited_chunk_ids": output.cited_chunk_ids,
-    }
-    judge_input = json.dumps(payload)
-    return judge_input
+    # Add the candidate answer and citations to the generator context.
+    judge_payload = json.loads(generator_context)
+    judge_payload["answer"] = output.answer
+    judge_payload["cited_chunk_ids"] = output.cited_chunk_ids
+
+    # Serialize the complete answer-judge payload as JSON.
+    serialized_judge_input = json.dumps(judge_payload)
+    return serialized_judge_input
 
 
 def _answer_question(question: dict[str, Any]) -> dict[str, Any]:
@@ -141,23 +127,37 @@ def _answer_question(question: dict[str, Any]) -> dict[str, Any]:
         >>> _answer_question({"question": "Is leave paid?", "speech_act": "factual", ...})
         {"answer": "...", "cited_chunk_ids": [...], "sources": [...]}
     """
-    text = question["question"]
+    # Read the labeled fields and retrieved chunks.
+    question_text = question["question"]
     speech_act = question["speech_act"]
     chunks = question["retrieved_chunks"]
-    user_builder = partial(_answer_user, text, speech_act, chunks)
-    judge_input_builder = partial(_answer_judge_input, text, speech_act, chunks)
+
+    # Build the generator message before starting the retry-and-judge flow.
+    generator_message = _build_answer_generator_message(
+        question_text,
+        speech_act,
+        chunks,
+    )
+
+    # Generate and judge the answer with the shared retry helper.
     retry_result = call_with_retry(
         ANSWER_SYSTEM,
         ANSWER_JUDGE_SYSTEM,
-        user_builder,
-        judge_input_builder,
+        "",
+        generator_message,
+        _answer_judge_input,
         CitedAnswer,
-        max_attempts=3,
     )
+
+    # Unpack the parsed answer output.
     output = retry_result[0]
+
+    # Select the chunks that the answer cited.
     record = dict(question)
     cited_ids = output.cited_chunk_ids
     cited_chunks = [chunk for chunk in chunks if chunk.chunk_id in cited_ids]
+
+    # Add the answer fields to the original question record.
     record["answer"] = output.answer
     record["cited_chunk_ids"] = cited_ids
     record["sources"] = [chunk.model_dump() for chunk in cited_chunks]
