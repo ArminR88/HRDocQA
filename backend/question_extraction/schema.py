@@ -2,8 +2,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
-TOPICS = ["vacation", "employee_change", "parental_leave", "unidentified"]
-SPEECH_ACTS = ["instruction", "factual"]
+
 class Polished_Questions(BaseModel):
     """
     Description:

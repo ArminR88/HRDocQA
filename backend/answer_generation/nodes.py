@@ -1,12 +1,24 @@
 import json
-from typing import Any
+from typing import Any, Callable, Type, TypeVar
 
-from backend.question_extraction.llm import call_with_retry
-from backend.question_extraction.schema import Topic_Speech_Act_Labeled
+from pydantic import BaseModel
+
+from backend.question_extraction.llm import (
+    _call,
+    _format_feedback,
+    _parse,
+    _prepend_heading_to_question,
+)
+from backend.question_extraction.schema import (
+    Question_Extraction_Judge_Output,
+    Topic_Speech_Act_Labeled,
+)
 
 from .prompts import ANSWER_JUDGE_SYSTEM, ANSWER_SYSTEM
 from .retrieval_helper import embed_query, retrieve_top_k
 from .schema import ANSWER_FAILURE_MESSAGE, AnswerState, CitedAnswer, Retrieval_Chunk
+
+T = TypeVar("T", bound=BaseModel)
 
 
 def _retrieve_question(question: Topic_Speech_Act_Labeled | dict[str, Any], question_index: int) -> dict[str, Any]:
@@ -114,6 +126,83 @@ def _answer_judge_input(
     return serialized_judge_input
 
 
+def _call_with_retry(
+    generator_system_prompt: str,
+    judge_system_prompt: str,
+    label: str,
+    text: str,
+    judge_input_builder: Callable[[str, T], str],
+    output_schema: Type[T],
+    max_attempts: int = 3,
+) -> tuple[T | None, bool]:
+    """
+    Call a generator prompt and judge each result, retrying with judge feedback.
+
+    Arguments:
+        generator_system_prompt (str): System prompt of the generator call.
+        judge_system_prompt (str): System prompt of the judge call.
+        label (str): Heading for the generator user message, e.g. "Raw query".
+        text (str): The query or question being processed.
+        judge_input_builder (Callable[[str, T], str]): Builds the judge user
+            message from the original text and the parsed generator output.
+        output_schema (Type[T]): Pydantic model the generator output is parsed into.
+        max_attempts (int): Maximum number of generator attempts.
+
+    Returns:
+        tuple[T | None, bool]: (output, True) on a judged pass, otherwise
+            (last_output, False) after max_attempts attempts.
+
+    Example:
+        >>> _call_with_retry(
+        ...     POLISH_SYSTEM,
+        ...     POLISH_JUDGE_SYSTEM,
+        ...     "Raw query",
+        ...     "hi how do i req leave",
+        ...     _build_polish_comparison_payload,
+        ...     Polished_Questions,
+        ... )
+        (Polished_Questions(status='ok', questions=['How do I request leave?']), True)
+    """
+    # Start with no feedback for the first attempt.
+    feedback = None
+
+    # Track whether the judge passed the last output.
+    passed = False
+
+    for _ in range(max_attempts):
+        # Build the generator message and call the generator prompt.
+        user_message = _prepend_heading_to_question(label, text, feedback)
+        raw_output = _call(generator_system_prompt, user_message)
+
+        # Parse the generator output into the expected schema.
+        parsed_output = _parse(raw_output, output_schema)
+
+        # Build the judge message from the original text and parsed output.
+        judge_message = judge_input_builder(text, parsed_output)
+
+        # Call the judge and parse its verdict.
+        judge_raw_output = _call(judge_system_prompt, judge_message)
+        verdict = _parse(
+            judge_raw_output,
+            Question_Extraction_Judge_Output,
+        )
+
+        # Stop when the judge passes the output.
+        if verdict.passed == True:
+            passed = True
+            break
+
+        # Format feedback for the next generator attempt.
+        feedback = _format_feedback(
+            verdict.failed_criteria,
+            verdict.feedback,
+        )
+
+    # Return the final output and whether the judge passed it.
+    retry_result = (parsed_output, passed)
+    return retry_result
+
+
 def _answer_question(question: dict[str, Any]) -> dict[str, Any]:
     """Summary: Generate, judge, and record one answer attempt sequence.
 
@@ -140,7 +229,7 @@ def _answer_question(question: dict[str, Any]) -> dict[str, Any]:
     )
 
     # Generate and judge the answer with the shared retry helper.
-    retry_result = call_with_retry(
+    retry_result = _call_with_retry(
         ANSWER_SYSTEM,
         ANSWER_JUDGE_SYSTEM,
         "",

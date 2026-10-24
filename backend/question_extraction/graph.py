@@ -12,14 +12,14 @@ def _route_after_polish(state: Question_Extraction_State) -> str:
         state (Question_Extraction_State): Current graph state with polish_status set.
 
     Returns:
-        str: Next route name, either "classify" or "end".
+        str: Next route name, either "topic_and_speech_act" or "end".
 
     Example:
         >>> _route_after_polish({"polish_status": "ok"})
-        'classify'
+        'topic_and_speech_act'
     """
     if state["polish_status"] == "ok":
-        return "classify"
+        return "topic_and_speech_act"
     return "end"
 
 
@@ -39,14 +39,14 @@ def build_extraction_graph():
     """
     graph = StateGraph(Question_Extraction_State)
     graph.add_node("polish", question_polish_node)
-    graph.add_node("classify", topic_and_speech_act_node)
+    graph.add_node("topic_and_speech_act", topic_and_speech_act_node)
     graph.add_edge(START, "polish")
     # Route polish failures directly to graph end.
     graph.add_conditional_edges(
         "polish",
         _route_after_polish,
-        {"classify": "classify", "end": END},
+        {"topic_and_speech_act": "topic_and_speech_act", "end": END},
     )
-    graph.add_edge("classify", END)
+    graph.add_edge("topic_and_speech_act", END)
     compiled = graph.compile()
     return compiled

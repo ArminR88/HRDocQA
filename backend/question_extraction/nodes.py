@@ -14,9 +14,9 @@ from .prompts import (
     TOPIC_JUDGE_SYSTEM,
     TOPIC_SYSTEM,
 )
+from .constants import ALLOWED_TOPICS
 from .schema import (
     Question_Extraction_Judge_Output,
-    TOPICS as ALLOWED_TOPICS,
     Topic_Speech_Act_Labeled,
     Question_Extraction_State,
     Polished_Questions,
@@ -30,7 +30,7 @@ def _build_polish_judge_message(
     polished: Polished_Questions,
 ) -> str:
     """
-    Build the comparison payload for the polish judge.
+    Description: Build the judge message for the polish stage.
 
     The payload carries the raw query and the polished questions so the judge
     can compare them.
@@ -71,7 +71,7 @@ def _build_topic_judge_message(
     topic: Topic_Classification,
 ) -> str:
     """
-    Build the comparison payload for the topic judge.
+    Description: Build the judge message for the topic stage.
 
     The payload carries the polished question, the allowed topics, and the
     assigned topic so the judge can compare them.
@@ -104,7 +104,7 @@ def _build_topic_judge_message(
 
 def _polish_raw_query_with_judge(raw_query: str) -> dict:
     """
-    Polish a raw query with retry and judge.
+    Description: Polish a raw query with retry and judge.
 
     Arguments:
         raw_query (str): Original user query.
@@ -164,7 +164,7 @@ def _polish_raw_query_with_judge(raw_query: str) -> dict:
 
 def question_polish_node(state: Question_Extraction_State) -> dict:
     """
-    Polish the raw query into standalone questions.
+    Description: Polish the raw query into standalone questions.
 
     Arguments:
         state (Question_Extraction_State): Current graph state with raw_query set.
@@ -195,7 +195,7 @@ def _classify_question_topic(
     max_attempts: int = 3,
 ) -> str:
     """
-    Classify one polished question's topic with retry and judge.
+    Description: Classify one polished question's topic with retry and judge.
 
     Arguments:
         polished_question (str): The polished question to classify.
@@ -250,7 +250,7 @@ def _classify_question_topic(
 
 def _classify_question_speech_act(polished_question: str) -> str:
     """
-    Classify one polished question's speech act with a single call.
+    Description: Classify one polished question's speech act with a single call.
 
     No judge and no retry; a response that cannot be parsed raises.
 
