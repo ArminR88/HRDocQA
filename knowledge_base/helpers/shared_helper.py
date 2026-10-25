@@ -5,18 +5,25 @@ from pathlib import Path
 
 def setup_logging(verbose: bool = False) -> None:
     """
-    Configure root logger for pipeline execution.
+    Description: Configure the root logger for pipeline execution.
 
     Arguments:
         verbose (bool): If True, enable DEBUG-level logs.
 
     Returns:
-        None
+        None: No value is returned.
 
     Example:
         >>> setup_logging(verbose=True)
+        None
     """
-    log_level = logging.DEBUG if verbose else logging.INFO
+
+    # Select the configured log level.
+    log_level = logging.INFO
+    if verbose == True:
+        log_level = logging.DEBUG
+
+    # Configure root logging.
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s | %(levelname)s | %(message)s",
@@ -26,7 +33,7 @@ def setup_logging(verbose: bool = False) -> None:
 
 def format_elapsed_seconds(seconds: float) -> str:
     """
-    Format elapsed seconds for human-readable logging.
+    Description: Format elapsed seconds for human-readable logging.
 
     Arguments:
         seconds (float): Elapsed runtime in seconds.
@@ -38,47 +45,64 @@ def format_elapsed_seconds(seconds: float) -> str:
         >>> format_elapsed_seconds(3.14159)
         '3.1s'
     """
+    # Format the duration to one decimal place.
     formatted = f"{seconds:.1f}s"
     return formatted
 
 
 def write_json(path: Path, data: dict) -> None:
     """
-    Write a dictionary to JSON with UTF-8 encoding.
+    Description: Write a dictionary to JSON with UTF-8 encoding.
 
     Arguments:
         path (Path): Output JSON file path.
         data (dict): JSON-serializable dictionary.
 
     Returns:
-        None
+        None: No value is returned.
 
     Example:
         >>> write_json(Path("summary.json"), {"stage": "chunking"})
+        None
     """
+
+    # Create the output directory.
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Serialize the dictionary as formatted JSON.
     serialized = json.dumps(data, ensure_ascii=False, indent=2)
+
+    # Write the JSON text to disk.
     path.write_text(serialized, encoding="utf-8")
 
 
 def write_jsonl(path: Path, rows) -> None:
     """
-    Write iterable rows as compact JSONL (one object per line).
+    Description: Write iterable rows as compact JSONL with one object per line.
 
     Arguments:
         path (Path): Output JSONL file path.
         rows: Iterable of JSON-serializable objects.
 
     Returns:
-        None
+        None: No value is returned.
 
     Example:
         >>> write_jsonl(Path("rows.jsonl"), [{"id": "a"}, {"id": "b"}])
+        None
     """
+
+    # Create the output directory.
     path.parent.mkdir(parents=True, exist_ok=True)
-    serialized_rows = [
-        json.dumps(row, ensure_ascii=False, separators=(",", ":"))
-        for row in rows
-    ]
+
+    # Serialize each row as compact JSON.
+    serialized_rows = []
+    for row in rows:
+        serialized_row = json.dumps(row, ensure_ascii=False, separators=(",", ":"))
+        serialized_rows.append(serialized_row)
+
+    # Join serialized rows with newline separators.
     serialized = "\n".join(serialized_rows)
+
+    # Write the JSONL text to disk.
     path.write_text(serialized, encoding="utf-8", newline="\n")

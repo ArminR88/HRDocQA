@@ -7,7 +7,7 @@ from knowledge_base.helpers.output_helper import build_output_directories
 
 def _read_summary(path: Path) -> dict:
     """
-    Read one stage summary JSON when present.
+    Description: Read one stage summary JSON when present.
 
     Arguments:
         path (Path): Summary file path.
@@ -16,16 +16,21 @@ def _read_summary(path: Path) -> dict:
         dict: Parsed summary data or an empty dictionary.
 
     Example:
-        >>> _read_summary(Path("01_chunking.json"))
+        >>> _read_summary(Path("01_chunking.json"))  # returns the parsed JSON dict
     """
+    # Read the summary file text.
     summary_text = path.read_text(encoding="utf-8")
+
+    # Parse the summary JSON.
     summary = json.loads(summary_text)
+
+    # Return the parsed summary.
     return summary
 
 
 def _build_banner(rows: list[dict], totals: dict) -> str:
     """
-    Build the stage 4 monitoring banner text.
+    Description: Build the Stage 4 monitoring banner text.
 
     Arguments:
         rows (list[dict]): Per-stage display rows.
@@ -35,15 +40,40 @@ def _build_banner(rows: list[dict], totals: dict) -> str:
         str: Formatted banner string.
 
     Example:
-        >>> _build_banner([], {})
+        >>> _build_banner(
+        ...     rows=[
+        ...         {"stage": "Chunking", "files": "    2", "chunks": "   10",
+        ...          "vectors": "      —", "joined": "     —", "dim": "   —",
+        ...          "skipped": "      —", "elapsed": "    0.5s"},
+        ...     ],
+        ...     totals={"files": "    2", "chunks": "   10", "vectors": "      —",
+        ...             "joined": "     —", "dim": "   —", "skipped": "      —",
+        ...             "elapsed": "    0.5s"},
+        ... )
+        # Returns the formatted Stage 4 banner.
     """
+    # Initialize the banner lines.
     lines = []
+
+    # Add the top border.
     lines.append("------------------------------------------------------------------")
+
+    # Add the stage title.
     lines.append("################ Stage 4: Monitoring ##############################")
+
+    # Add the title divider.
     lines.append("------------------------------------------------------------------")
+
+    # Add the column header.
     lines.append("Stage         | Files | Chunks | Vectors | Joined |  Dim | Skipped | Elapsed")
+
+    # Add the column-header divider.
     lines.append("------------------------------------------------------------------------------")
+
+    # Render each per-stage row.
     for row in rows:
+
+        # Append the formatted per-stage row.
         lines.append(
             f"{row['stage']:<13} | "
             f"{row['files']:>5} | "
@@ -54,7 +84,11 @@ def _build_banner(rows: list[dict], totals: dict) -> str:
             f"{row['skipped']:>7} | "
             f"{row['elapsed']}"
         )
+
+    # Add the footer border.
     lines.append("------------------------------------------------------------------------------")
+
+    # Build the totals line.
     total_line = (
         f"{'Total':<13} | "
         f"{totals['files']:>5} | "
@@ -65,9 +99,17 @@ def _build_banner(rows: list[dict], totals: dict) -> str:
         f"{totals['skipped']:>7} | "
         f"{totals['elapsed']}"
     )
+
+    # Append the totals line.
     lines.append(total_line)
+
+    # Add the bottom border.
     lines.append("------------------------------------------------------------------")
+
+    # Join the banner lines.
     banner = "\n".join(lines)
+
+    # Return the formatted banner.
     return banner
 
 
@@ -82,7 +124,7 @@ def run_stage() -> None:
         None
 
     Example:
-        >>> run_stage()
+        >>> run_stage()  # requires summaries, embeddings.jsonl, and kb_index.jsonl from stages 1-3
     """
     directories = build_output_directories()
     summary_dir = directories["pipeline_summary"]
@@ -162,41 +204,44 @@ def run_stage() -> None:
     assembling_skipped_count_value = assembling_summary["skipped_count"]
     assembling_skipped_count = int(assembling_skipped_count_value)
 
-    monitoring_rows = [
-        # Chunking row uses file_count and chunk_count from 01_chunking.json.
-        {
-            "stage": "Chunking",
-            "files": f"{chunking_file_count:>5}",
-            "chunks": f"{chunking_chunk_count:>6}",
-            "vectors": "      —",
-            "joined": "     —",
-            "dim": "   —",
-            "skipped": "      —",
-            "elapsed": f"{chunking_elapsed:>7.1f}s",
-        },
-        # Embedding row uses vector_count and dim from 02_embedding.json.
-        {
-            "stage": "Embedding",
-            "files": "    —",
-            "chunks": "     —",
-            "vectors": f"{embedding_vector_count:>7}",
-            "joined": "     —",
-            "dim": f"{embedding_dim:>4}",
-            "skipped": f"{embedding_skipped_count:>7}",
-            "elapsed": f"{embedding_elapsed:>7.1f}s",
-        },
-        # Assembling row uses joined_count, skipped_count, and dim from 03_assembling.json.
-        {
-            "stage": "Assembling",
-            "files": "    —",
-            "chunks": "     —",
-            "vectors": "      —",
-            "joined": f"{assembling_joined_count:>6}",
-            "dim": f"{assembling_dim:>4}",
-            "skipped": f"{assembling_skipped_count:>7}",
-            "elapsed": f"{assembling_elapsed:>7.1f}s",
-        },
-    ]
+    # Build the chunking row.
+    chunking_banner_row = {}
+    chunking_banner_row["stage"] = "Chunking"
+    chunking_banner_row["files"] = f"{chunking_file_count:>5}"
+    chunking_banner_row["chunks"] = f"{chunking_chunk_count:>6}"
+    chunking_banner_row["vectors"] = "      —"
+    chunking_banner_row["joined"] = "     —"
+    chunking_banner_row["dim"] = "   —"
+    chunking_banner_row["skipped"] = "      —"
+    chunking_banner_row["elapsed"] = f"{chunking_elapsed:>7.1f}s"
+
+    # Build the embedding row.
+    embedding_banner_row = {}
+    embedding_banner_row["stage"] = "Embedding"
+    embedding_banner_row["files"] = "    —"
+    embedding_banner_row["chunks"] = "     —"
+    embedding_banner_row["vectors"] = f"{embedding_vector_count:>7}"
+    embedding_banner_row["joined"] = "     —"
+    embedding_banner_row["dim"] = f"{embedding_dim:>4}"
+    embedding_banner_row["skipped"] = f"{embedding_skipped_count:>7}"
+    embedding_banner_row["elapsed"] = f"{embedding_elapsed:>7.1f}s"
+
+    # Build the assembling row.
+    assembling_banner_row = {}
+    assembling_banner_row["stage"] = "Assembling"
+    assembling_banner_row["files"] = "    —"
+    assembling_banner_row["chunks"] = "     —"
+    assembling_banner_row["vectors"] = "      —"
+    assembling_banner_row["joined"] = f"{assembling_joined_count:>6}"
+    assembling_banner_row["dim"] = f"{assembling_dim:>4}"
+    assembling_banner_row["skipped"] = f"{assembling_skipped_count:>7}"
+    assembling_banner_row["elapsed"] = f"{assembling_elapsed:>7.1f}s"
+
+    # Collect the banner rows.
+    monitoring_rows = []
+    monitoring_rows.append(chunking_banner_row)
+    monitoring_rows.append(embedding_banner_row)
+    monitoring_rows.append(assembling_banner_row)
 
     total_files = chunking_file_count
     total_chunks = chunking_chunk_count
@@ -257,15 +302,15 @@ def run_stage() -> None:
         assembling_row["elapsed_s"] = round(assembling_elapsed, 4)
         writer.writerow(assembling_row)
 
-    totals = {
-        "files": f"{total_files:>5}",
-        "chunks": f"{total_chunks:>6}",
-        "vectors": f"{total_vectors:>7}",
-        "joined": f"{total_joined:>6}",
-        "dim": f"{total_dim:>4}",
-        "skipped": f"{total_skipped:>7}",
-        "elapsed": f"{total_elapsed:>7.1f}s",
-    }
+    # Build the totals row.
+    totals = {}
+    totals["files"] = f"{total_files:>5}"
+    totals["chunks"] = f"{total_chunks:>6}"
+    totals["vectors"] = f"{total_vectors:>7}"
+    totals["joined"] = f"{total_joined:>6}"
+    totals["dim"] = f"{total_dim:>4}"
+    totals["skipped"] = f"{total_skipped:>7}"
+    totals["elapsed"] = f"{total_elapsed:>7.1f}s"
     banner = _build_banner(rows=monitoring_rows, totals=totals)
     print(banner)
     banner_path = banners_dir / "stage_4.txt"
