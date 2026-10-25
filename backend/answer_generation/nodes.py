@@ -1,7 +1,5 @@
 import json
-from typing import Any, Callable, Type, TypeVar
-
-from pydantic import BaseModel
+from typing import Any
 
 from backend.question_extraction.llm import (
     _call,
@@ -16,9 +14,8 @@ from backend.question_extraction.schema import (
 
 from .prompts import ANSWER_JUDGE_SYSTEM, ANSWER_SYSTEM
 from .retrieval_helper import embed_query, retrieve_top_k
-from .schema import ANSWER_FAILURE_MESSAGE, AnswerState, CitedAnswer, Retrieval_Chunk
-
-T = TypeVar("T", bound=BaseModel)
+from .constants import ANSWER_FAILURE_MESSAGE
+from .schema import Answer_Record, Answer_State, Cited_Answer, Retrieval_Chunk
 
 
 def _retrieve_question(question: Topic_Speech_Act_Labeled | dict[str, Any], question_index: int) -> dict[str, Any]:
@@ -35,20 +32,30 @@ def _retrieve_question(question: Topic_Speech_Act_Labeled | dict[str, Any], ques
         >>> _retrieve_question(Topic_Speech_Act_Labeled(question="Is leave paid?", topic="parental_leave", speech_act="factual"), 0)
         {"question": "Is leave paid?", ...}
     """
+    # Convert the labeled question to a record.
     question_record = question.model_dump()
-    query_vector = embed_query(question_record["question"])
+
+    # Retrieve chunks for the question text.
+    question_text = question_record["question"]
+    query_vector = embed_query(question_text)
     retrieved_chunks = retrieve_top_k(query_vector)
+
+    # Mark the question according to whether retrieval found chunks.
     case = "retrieved"
     if len(retrieved_chunks) == 0:
         case = "no_match"
+
+    # Add retrieval metadata to the question record.
     record = dict(question_record)
     record["question_index"] = question_index
     record["retrieved_chunks"] = retrieved_chunks
     record["case"] = case
+
+    # Return the retrieved question record.
     return record
 
 
-def retrieval_node(state: AnswerState) -> dict[str, Any]:
+def retrieval_node(state: Answer_State) -> dict[str, Any]:
     """Summary: Retrieve matching chunks for every labeled question.
 
     Arguments:
@@ -61,14 +68,16 @@ def retrieval_node(state: AnswerState) -> dict[str, Any]:
         >>> retrieval_node({"topic_speech_act_labeled": [...]})
         {"topic_speech_act_labeled": [...]}
     """
+    # Read the labeled questions.
     labeled_questions = state["topic_speech_act_labeled"]
-    indexed_questions = enumerate(labeled_questions)
+
+    # Retrieve chunks for each labeled question.
     retrieved_questions = []
-    for indexed_question in indexed_questions:
-        question_index = indexed_question[0]
-        question = indexed_question[1]
+    for question_index, question in enumerate(labeled_questions):
         retrieved_question = _retrieve_question(question, question_index)
         retrieved_questions.append(retrieved_question)
+
+    # Return the retrieval results.
     update = {"topic_speech_act_labeled": retrieved_questions}
     return update
 
@@ -92,129 +101,64 @@ def _build_answer_generator_message(
     payload = {}
     payload["question"] = question_text
     payload["speech_act"] = speech_act
-    payload["retrieved_chunks"] = [chunk.model_dump() for chunk in chunks]
+
+    # Collect the chunk records.
+    retrieved_chunks = []
+    for chunk in chunks:
+        chunk_record = chunk.model_dump()
+        retrieved_chunks.append(chunk_record)
+    payload["retrieved_chunks"] = retrieved_chunks
 
     # Serialize the generator message as JSON.
     generator_message = json.dumps(payload)
     return generator_message
 
 
-def _answer_judge_input(
-    generator_context: str,
-    output: CitedAnswer,
+def _build_answer_judge_message(
+    question_text: str,
+    speech_act: str,
+    chunks: list[Retrieval_Chunk],
+    output: Cited_Answer,
 ) -> str:
-    """Summary: Build the answer judge's input from evidence and model output.
+    """
+    Description: Build the answer judge's input from structured answer fields.
 
     Arguments:
-        generator_context: JSON context passed to the answer generator.
-        output: Candidate answer and citations.
+        question_text (str): The question being answered.
+        speech_act (str): The question's speech-act label.
+        chunks (list[Retrieval_Chunk]): Retrieved chunks supplied to the generator.
+        output (Cited_Answer): Candidate answer and citations.
 
     Returns:
-        JSON judge input.
-
-    Example:
-        >>> _answer_judge_input('{"question": "Is leave paid?", "speech_act": "factual", "retrieved_chunks": []}', CitedAnswer(answer="Yes.", cited_chunk_ids=["x"]))
-        '{"question": "Is leave paid?", ...}'
+        str: The serialized judge input.
     """
-    # Add the candidate answer and citations to the generator context.
-    judge_payload = json.loads(generator_context)
+    # Collect the question, speech act, retrieved chunks, and candidate answer.
+    judge_payload = {}
+    judge_payload["question"] = question_text
+    judge_payload["speech_act"] = speech_act
+    retrieved_chunks = []
+    for chunk in chunks:
+        chunk_record = chunk.model_dump()
+        retrieved_chunks.append(chunk_record)
+    judge_payload["retrieved_chunks"] = retrieved_chunks
     judge_payload["answer"] = output.answer
     judge_payload["cited_chunk_ids"] = output.cited_chunk_ids
 
-    # Serialize the complete answer-judge payload as JSON.
-    serialized_judge_input = json.dumps(judge_payload)
-    return serialized_judge_input
+    # Serialize the judge message as JSON.
+    judge_message = json.dumps(judge_payload)
+    return judge_message
 
 
-def _call_with_retry(
-    generator_system_prompt: str,
-    judge_system_prompt: str,
-    label: str,
-    text: str,
-    judge_input_builder: Callable[[str, T], str],
-    output_schema: Type[T],
-    max_attempts: int = 3,
-) -> tuple[T | None, bool]:
+def _answer_question_with_judge(question: dict[str, Any]) -> dict[str, Any]:
     """
-    Call a generator prompt and judge each result, retrying with judge feedback.
+    Description: Generate, judge, and record one answer attempt sequence.
 
     Arguments:
-        generator_system_prompt (str): System prompt of the generator call.
-        judge_system_prompt (str): System prompt of the judge call.
-        label (str): Heading for the generator user message, e.g. "Raw query".
-        text (str): The query or question being processed.
-        judge_input_builder (Callable[[str, T], str]): Builds the judge user
-            message from the original text and the parsed generator output.
-        output_schema (Type[T]): Pydantic model the generator output is parsed into.
-        max_attempts (int): Maximum number of generator attempts.
+        question (dict[str, Any]): A labeled question with retrieved chunks.
 
     Returns:
-        tuple[T | None, bool]: (output, True) on a judged pass, otherwise
-            (last_output, False) after max_attempts attempts.
-
-    Example:
-        >>> _call_with_retry(
-        ...     POLISH_SYSTEM,
-        ...     POLISH_JUDGE_SYSTEM,
-        ...     "Raw query",
-        ...     "hi how do i req leave",
-        ...     _build_polish_comparison_payload,
-        ...     Polished_Questions,
-        ... )
-        (Polished_Questions(status='ok', questions=['How do I request leave?']), True)
-    """
-    # Start with no feedback for the first attempt.
-    feedback = None
-
-    # Track whether the judge passed the last output.
-    passed = False
-
-    for _ in range(max_attempts):
-        # Build the generator message and call the generator prompt.
-        user_message = _prepend_heading_to_question(label, text, feedback)
-        raw_output = _call(generator_system_prompt, user_message)
-
-        # Parse the generator output into the expected schema.
-        parsed_output = _parse(raw_output, output_schema)
-
-        # Build the judge message from the original text and parsed output.
-        judge_message = judge_input_builder(text, parsed_output)
-
-        # Call the judge and parse its verdict.
-        judge_raw_output = _call(judge_system_prompt, judge_message)
-        verdict = _parse(
-            judge_raw_output,
-            Question_Extraction_Judge_Output,
-        )
-
-        # Stop when the judge passes the output.
-        if verdict.passed == True:
-            passed = True
-            break
-
-        # Format feedback for the next generator attempt.
-        feedback = _format_feedback(
-            verdict.failed_criteria,
-            verdict.feedback,
-        )
-
-    # Return the final output and whether the judge passed it.
-    retry_result = (parsed_output, passed)
-    return retry_result
-
-
-def _answer_question(question: dict[str, Any]) -> dict[str, Any]:
-    """Summary: Generate, judge, and record one answer attempt sequence.
-
-    Arguments:
-        question: A labeled question with retrieved chunks.
-
-    Returns:
-        Question record populated with its answer, citations, sources, and case.
-
-    Example:
-        >>> _answer_question({"question": "Is leave paid?", "speech_act": "factual", ...})
-        {"answer": "...", "cited_chunk_ids": [...], "sources": [...]}
+        dict[str, Any]: The answer record. If judging exhausts all attempts,
+            answer is ANSWER_FAILURE_MESSAGE and case is "answer_failed".
     """
     # Read the labeled fields and retrieved chunks.
     question_text = question["question"]
@@ -228,33 +172,64 @@ def _answer_question(question: dict[str, Any]) -> dict[str, Any]:
         chunks,
     )
 
-    # Generate and judge the answer with the shared retry helper.
-    retry_result = _call_with_retry(
-        ANSWER_SYSTEM,
-        ANSWER_JUDGE_SYSTEM,
-        "",
-        generator_message,
-        _answer_judge_input,
-        CitedAnswer,
-    )
+    # Run the retry-and-judge loop.
+    feedback = None
+    passed = False
+    for _ in range(3):
+        # Build the generator user message and call the answer prompt.
+        user_message = _prepend_heading_to_question("", generator_message, feedback)
+        raw_output = _call(ANSWER_SYSTEM, user_message)
 
-    # Unpack the parsed answer output.
-    output = retry_result[0]
+        # Parse the generator output into the cited-answer schema.
+        output = _parse(raw_output, Cited_Answer)
+
+        # Build the judge message from the same fields the generator saw.
+        judge_message = _build_answer_judge_message(question_text, speech_act, chunks, output)
+
+        # Call the judge and parse its verdict.
+        judge_raw = _call(ANSWER_JUDGE_SYSTEM, judge_message)
+        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+
+        # Stop when the judge passes the answer.
+        if verdict.passed == True:
+            passed = True
+            break
+
+        # Format feedback for the next attempt.
+        feedback = _format_feedback(verdict.failed_criteria, verdict.feedback)
 
     # Select the chunks that the answer cited.
-    record = dict(question)
     cited_ids = output.cited_chunk_ids
-    cited_chunks = [chunk for chunk in chunks if chunk.chunk_id in cited_ids]
+    cited_chunks = []
+    for chunk in chunks:
+        if chunk.chunk_id in cited_ids:
+            cited_chunks.append(chunk)
 
-    # Add the answer fields to the original question record.
-    record["answer"] = output.answer
-    record["cited_chunk_ids"] = cited_ids
-    record["sources"] = [chunk.model_dump() for chunk in cited_chunks]
-    record["case"] = "answered"
-    return record
+    # Choose the case and answer text from the pass flag.
+    answer_text = ANSWER_FAILURE_MESSAGE
+    case = "answer_failed"
+    if passed == True:
+        answer_text = output.answer
+        case = "answered"
+
+    # Build and dump the record.
+    answer_record = Answer_Record(
+        question=question_text,
+        topic=question["topic"],
+        speech_act=speech_act,
+        question_index=question["question_index"],
+        retrieved_chunks=chunks,
+        answer=answer_text,
+        cited_chunk_ids=cited_ids,
+        sources=cited_chunks,
+        case=case,
+    )
+
+    # Return the record as a dictionary for downstream graph nodes.
+    return answer_record.model_dump()
 
 
-def answer_node(state: AnswerState) -> dict[str, Any]:
+def answer_node(state: Answer_State) -> dict[str, Any]:
     """Summary: Generate answers for questions with retrieved evidence.
 
     Arguments:
@@ -267,14 +242,27 @@ def answer_node(state: AnswerState) -> dict[str, Any]:
         >>> answer_node({"topic_speech_act_labeled": [...]})
         {"answer_results": [...]}
     """
+    # Read questions with retrieval matches.
     labeled_questions = state["topic_speech_act_labeled"]
-    eligible_questions = [question for question in labeled_questions if question["case"] == "retrieved"]
-    answer_results = [_answer_question(question) for question in eligible_questions]
+
+    # Select questions eligible for answer generation.
+    eligible_questions = []
+    for question in labeled_questions:
+        if question["case"] == "retrieved":
+            eligible_questions.append(question)
+
+    # Generate answers for eligible questions.
+    answer_results = []
+    for question in eligible_questions:
+        answer_result = _answer_question_with_judge(question)
+        answer_results.append(answer_result)
+
+    # Return the answer results.
     update = {"answer_results": answer_results}
     return update
 
 
-def _no_match_question(question: dict[str, Any]) -> dict[str, Any]:
+def _build_no_match_record(question: dict[str, Any]) -> dict[str, Any]:
     """Summary: Record the no-match failure for one question.
 
     Arguments:
@@ -284,18 +272,27 @@ def _no_match_question(question: dict[str, Any]) -> dict[str, Any]:
         Question record populated with the no-match failure result.
 
     Example:
-        >>> _no_match_question({"question": "Is leave paid?", "question_index": 0})
+        >>> _build_no_match_record({"question": "Is leave paid?", "question_index": 0})
         {"answer": "HRDocQA cannot provide an answer this time.", ...}
     """
-    record = dict(question)
-    record["answer"] = ANSWER_FAILURE_MESSAGE
-    record["cited_chunk_ids"] = []
-    record["sources"] = []
-    record["case"] = "no_match"
-    return record
+    # Construct and validate the no-match answer record.
+    answer_record = Answer_Record(
+        question=question["question"],
+        topic=question["topic"],
+        speech_act=question["speech_act"],
+        question_index=question["question_index"],
+        retrieved_chunks=question["retrieved_chunks"],
+        answer=ANSWER_FAILURE_MESSAGE,
+        cited_chunk_ids=[],
+        sources=[],
+        case="no_match",
+    )
+
+    # Return the record as a dictionary for downstream graph nodes.
+    return answer_record.model_dump()
 
 
-def no_match_node(state: AnswerState) -> dict[str, Any]:
+def no_match_node(state: Answer_State) -> dict[str, Any]:
     """Summary: Record the no-match failure for questions without evidence.
 
     Arguments:
@@ -308,14 +305,27 @@ def no_match_node(state: AnswerState) -> dict[str, Any]:
         >>> no_match_node({"topic_speech_act_labeled": [...]})
         {"no_match_results": [...]}
     """
+    # Read questions without retrieval matches.
     labeled_questions = state["topic_speech_act_labeled"]
-    unmatched_questions = [question for question in labeled_questions if question["case"] == "no_match"]
-    no_match_results = [_no_match_question(question) for question in unmatched_questions]
+
+    # Select questions that require no-match results.
+    unmatched_questions = []
+    for question in labeled_questions:
+        if question["case"] == "no_match":
+            unmatched_questions.append(question)
+
+    # Build no-match results for the selected questions.
+    no_match_results = []
+    for question in unmatched_questions:
+        no_match_result = _build_no_match_record(question)
+        no_match_results.append(no_match_result)
+
+    # Return the no-match results.
     update = {"no_match_results": no_match_results}
     return update
 
 
-def join_node(state: AnswerState) -> dict[str, Any]:
+def join_node(state: Answer_State) -> dict[str, Any]:
     """Summary: Join answer and no-match branch results in question order.
 
     Arguments:
@@ -328,16 +338,50 @@ def join_node(state: AnswerState) -> dict[str, Any]:
         >>> join_node({"topic_speech_act_labeled": [...], "answer_results": [...], "no_match_results": [...]})
         {"topic_speech_act_labeled": [...], "final_message": "..."}
     """
+    # Collect answer and no-match results.
     results = []
     if "answer_results" in state:
         results.extend(state["answer_results"])
     if "no_match_results" in state:
         results.extend(state["no_match_results"])
-    results_by_index = {result["question_index"]: result for result in results}
-    labeled_questions = [
-        results_by_index[question["question_index"]]
-        for question in state["topic_speech_act_labeled"]
-    ]
-    final_message = "\n\n".join(question["answer"] for question in labeled_questions)
+
+    # Index results by question position.
+    results_by_index = {}
+    for result in results:
+        question_index = result["question_index"]
+        results_by_index[question_index] = result
+
+    # Restore the labeled-question order.
+    labeled_questions = []
+    for question in state["topic_speech_act_labeled"]:
+        question_index = question["question_index"]
+        labeled_question = results_by_index[question_index]
+        labeled_questions.append(labeled_question)
+
+    # Join answers into the final message.
+    answers = []
+    for question in labeled_questions:
+        answer = question["answer"]
+        answers.append(answer)
+    final_message = "\n\n".join(answers)
+
+    # Return the joined state update.
     update = {"topic_speech_act_labeled": labeled_questions, "final_message": final_message}
     return update
+
+
+def answer_failure_node(state: Answer_State) -> dict[str, Any]:
+    """
+    Description: Emit the universal answer failure message.
+
+    Arguments:
+        state (Answer_State): Current graph state.
+
+    Returns:
+        dict[str, Any]: State update with final_message set.
+    """
+    # Build the failure update.
+    state_update = {}
+    state_update["final_message"] = ANSWER_FAILURE_MESSAGE
+
+    return state_update

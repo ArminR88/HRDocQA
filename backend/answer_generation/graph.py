@@ -2,31 +2,33 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.question_extraction import build_extraction_graph
 
-from .nodes import answer_node, join_node, no_match_node, retrieval_node
-from .schema import AnswerState
+from .nodes import answer_failure_node, answer_node, join_node, no_match_node, retrieval_node
+from .schema import Answer_State
 
 
-def _route_after_analysis(state: AnswerState) -> str:
+def _route_after_analysis(state: Answer_State) -> str:
     """Summary: Route failed analysis directly to its existing failure result.
 
     Arguments:
         state: State returned by the analysis subgraph.
 
     Returns:
-        The retrieval route for successful analysis or the end route on failure.
+        The retrieval route on success or the failure route otherwise.
 
     Example:
         >>> _route_after_analysis({"polish_status": "ok"})
         "retrieval"
+        >>> _route_after_analysis({"polish_status": "failed"})
+        "failure"
     """
     if state["polish_status"] == "ok":
         route = "retrieval"
     else:
-        route = "end"
+        route = "failure"
     return route
 
 
-def _route_after_retrieval(state: AnswerState) -> list[str]:
+def _route_after_retrieval(state: Answer_State) -> list[str]:
     """Summary: Select answer and no-match branches for retrieved questions.
 
     Arguments:
@@ -62,8 +64,9 @@ def build_answer_graph():
         >>> build_answer_graph().invoke({"raw_query": "How do I request leave?"})
         {"topic_speech_act_labeled": [...], "final_message": "..."}
     """
-    graph = StateGraph(AnswerState)
+    graph = StateGraph(Answer_State)
     graph.add_node("analysis", build_extraction_graph())
+    graph.add_node("failure", answer_failure_node)
     graph.add_node("retrieval", retrieval_node)
     graph.add_node("answer", answer_node)
     graph.add_node("no_match", no_match_node)
@@ -72,8 +75,9 @@ def build_answer_graph():
     graph.add_conditional_edges(
         "analysis",
         _route_after_analysis,
-        {"retrieval": "retrieval", "end": END},
+        {"retrieval": "retrieval", "failure": "failure"},
     )
+    graph.add_edge("failure", END)
     graph.add_conditional_edges(
         "retrieval",
         _route_after_retrieval,
