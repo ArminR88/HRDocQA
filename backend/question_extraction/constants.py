@@ -1,4 +1,4 @@
-"""Prompt data only for question extraction."""
+"""Polish, topic, and speech-act prompt data for question extraction."""
 
 english_criterion = (
     "english",
@@ -45,6 +45,27 @@ POLISH_PROMPT_CRITERIA = [
     precedence_criterion,
 ]
 
+speech_act_single_label_criterion = (
+    "S1",
+    "Output a single value.",
+)
+
+speech_act_allowed_value_criterion = (
+    "S2",
+    'The value must be "instruction" or "factual".',
+)
+
+speech_act_definition_criterion = (
+    "S3",
+    'Use "instruction" only when a step-by-step or list answer is natural.',
+)
+
+SPEECH_ACT_PROMPT_CRITERIA = [
+    speech_act_single_label_criterion,
+    speech_act_allowed_value_criterion,
+    speech_act_definition_criterion,
+]
+
 TOPIC_DEFINITIONS = {
     "vacation": "Vacation leave, paid time off, accrual, balances, carryover, scheduling, and payout.",
     "employee_change": "Changes to an employee's personal or employment records, role, payroll, or work arrangement.",
@@ -53,7 +74,9 @@ TOPIC_DEFINITIONS = {
 }
 
 ALLOWED_TOPICS = list(TOPIC_DEFINITIONS.keys())
-ALLOWED_SPEECH_ACTS = ["instruction", "factual"]
+# "unverified" is used when the classifier could not produce a
+# judge-approved label (parse failure or repeated judge rejection).
+ALLOWED_SPEECH_ACTS = ["instruction", "factual", "unverified"]
 
 POLISH_DESIGN_NOTES = """Privacy: This version prioritizes privacy without an authorization mechanism. If downstream requires employee-specific lookup using identifiers, that must be handled by system design, not inferred by the polishing model.
 

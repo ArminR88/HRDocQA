@@ -4,6 +4,7 @@ from .constants import (
     POLISH_DESIGN_NOTES,
     POLISH_PROMPT_CRITERIA,
     POLISH_TEST_GATE_SPEC,
+    SPEECH_ACT_PROMPT_CRITERIA,
     TOPIC_DEFINITIONS,
 )
 
@@ -168,8 +169,61 @@ S3: Use "instruction" only when a step-by-step or list answer is natural.
     return prompt
 
 
+def _render_speech_act_criteria_block() -> str:
+    """
+    Description: Render speech-act criteria as a bullet list.
+
+    Arguments: None.
+
+    Returns:
+        str: The rendered speech-act criteria block.
+
+    Example:
+        >>> _render_speech_act_criteria_block()
+        '- S1: Output a single value.\\n- S2: The value must be "instruction" or "factual".\\n- S3: Use "instruction" only when a step-by-step or list answer is natural.'
+    """
+    # Render each speech-act criterion as a labeled bullet.
+    rendered_lines = []
+    for criterion_id, criterion_text in SPEECH_ACT_PROMPT_CRITERIA:
+        rendered_line = f"- {criterion_id}: {criterion_text}"
+        rendered_lines.append(rendered_line)
+
+    # Join the speech-act criterion bullets into a prompt block.
+    rendered_criteria = "\n".join(rendered_lines)
+    return rendered_criteria
+
+
+def build_speech_act_judge_prompt() -> str:
+    """
+    Description: Build the system prompt for judging speech-act classifications.
+
+    Arguments: None.
+
+    Returns:
+        str: The speech-act judge system prompt.
+
+    Example:
+        >>> build_speech_act_judge_prompt()
+        'You are a strict judge of a speech-act classification.\\n...'
+    """
+    # Render the shared speech-act criteria.
+    rendered_criteria = _render_speech_act_criteria_block()
+
+    # Build the speech-act judge prompt with the rendered criteria.
+    prompt = f"""You are a strict judge of a speech-act classification.
+You receive a question, the speech act assigned to it, and the allowed
+speech acts. Judge against these criteria:
+{rendered_criteria}
+Return ONLY JSON: {{"passed": true|false, "failed_criteria": ["<criterion_id>", ...], "feedback": "..."}}.
+"passed" is true only if all criteria hold; otherwise list the failed
+IDs and give actionable feedback.
+The input payload keys are "question", "assigned_speech_act", and "allowed_speech_acts"."""
+    return prompt
+
+
 POLISH_SYSTEM = build_polish_prompt()
 POLISH_JUDGE_SYSTEM = build_polish_judge_prompt()
 TOPIC_SYSTEM = build_topic_prompt()
 TOPIC_JUDGE_SYSTEM = build_topic_judge_prompt()
 SPEECH_ACT_SYSTEM = build_speech_act_prompt()
+SPEECH_ACT_JUDGE_SYSTEM = build_speech_act_judge_prompt()

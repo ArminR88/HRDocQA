@@ -7,7 +7,7 @@ ANSWER_FAILURE_MESSAGE = "HRDocQA cannot provide an answer this time."
 
 format_by_speech_act_criterion = (
     "A1 [rule]",
-    'FORMAT BY SPEECH ACT — if speech_act is "instruction", the answer is a numbered or bulleted list of steps. If "factual", the answer is one paragraph.',
+    'FORMAT BY SPEECH ACT — if speech_act is "instruction", the answer is a numbered or bulleted list of steps. If speech_act is "factual" or "unverified", the answer is one paragraph.',
 )
 supported_by_cited_chunks_criterion = (
     "A2 [judge]",

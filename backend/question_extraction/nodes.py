@@ -1,5 +1,8 @@
 import json
 import logging
+import time
+
+from pydantic import ValidationError
 
 from .llm import (
     _call,
@@ -10,11 +13,12 @@ from .llm import (
 from .prompts import (
     POLISH_JUDGE_SYSTEM,
     POLISH_SYSTEM,
+    SPEECH_ACT_JUDGE_SYSTEM,
     SPEECH_ACT_SYSTEM,
     TOPIC_JUDGE_SYSTEM,
     TOPIC_SYSTEM,
 )
-from .constants import ALLOWED_TOPICS
+from .constants import ALLOWED_SPEECH_ACTS, ALLOWED_TOPICS
 from .schema import (
     Question_Extraction_Judge_Output,
     Topic_Speech_Act_Labeled,
@@ -102,6 +106,40 @@ def _build_topic_judge_message(
     return comparison_payload
 
 
+def _build_speech_act_judge_message(
+    polished_question: str,
+    speech_act: Speech_Act_Classification,
+) -> str:
+    """
+    Description: Build the judge message for the speech-act stage.
+
+    Arguments:
+        polished_question (str): Polished question.
+        speech_act (Speech_Act_Classification): Parsed speech-act output.
+
+    Returns:
+        str: JSON text with the question, allowed speech acts, and assigned
+            speech act.
+
+    Example:
+        >>> _build_speech_act_judge_message(
+        ...     "How do I request parental leave?",
+        ...     Speech_Act_Classification(speech_act="instruction"),
+        ... )
+        '{"question": "How do I request parental leave?", "allowed_speech_acts": ["instruction", "factual"], "assigned_speech_act": "instruction"}'
+    """
+    # Collect the question, allowed speech acts, and assigned speech act.
+    payload = {}
+    payload["question"] = polished_question
+    payload["allowed_speech_acts"] = ALLOWED_SPEECH_ACTS
+    payload["assigned_speech_act"] = speech_act.speech_act
+
+    # Serialize the speech-act judge payload.
+    judge_message = json.dumps(payload)
+
+    return judge_message
+
+
 def _polish_raw_query_with_judge(raw_query: str) -> dict:
     """
     Description: Polish a raw query with retry and judge.
@@ -119,6 +157,9 @@ def _polish_raw_query_with_judge(raw_query: str) -> dict:
     # Start with no feedback for the first attempt.
     feedback = None
 
+    # Keep a failed result if every model response fails to parse.
+    polished = Polished_Questions(status="failed", questions=[])
+
     # Track whether the judge passed the polish output.
     passed = False
 
@@ -128,7 +169,12 @@ def _polish_raw_query_with_judge(raw_query: str) -> dict:
         raw_output = _call(POLISH_SYSTEM, user_message)
 
         # Parse the generator output into the polish schema.
-        polished = _parse(raw_output, Polished_Questions)
+        try:
+            polished = _parse(raw_output, Polished_Questions)
+        except (json.JSONDecodeError, ValidationError):
+            # Retry when the model returns no JSON or malformed JSON.
+            feedback = "Your previous response was not valid JSON matching the schema. Return only the JSON object."
+            continue
 
         # Build the judge message from the raw query and the polished output.
         judge_message = _build_polish_judge_message(raw_query, polished)
@@ -224,7 +270,12 @@ def _classify_question_topic(
         raw_output = _call(TOPIC_SYSTEM, user_message)
 
         # Parse the generator output into the topic schema.
-        topic_output = _parse(raw_output, Topic_Classification)
+        try:
+            topic_output = _parse(raw_output, Topic_Classification)
+        except (json.JSONDecodeError, ValidationError):
+            # Retry when the model returns no JSON or malformed JSON.
+            feedback = "Your previous response was not valid JSON matching the schema. Return only the JSON object."
+            continue
 
         # Build the judge message from the question and the topic output.
         judge_message = _build_topic_judge_message(polished_question, topic_output)
@@ -248,33 +299,65 @@ def _classify_question_topic(
     return classified_topic
 
 
-def _classify_question_speech_act(polished_question: str) -> str:
+def _classify_question_speech_act_with_judge(
+    polished_question: str,
+    max_attempts: int = 3,
+) -> str:
     """
-    Description: Classify one polished question's speech act with a single call.
-
-    No judge and no retry; a response that cannot be parsed raises.
+    Description: Classify one polished question's speech act with retry and judge.
 
     Arguments:
         polished_question (str): The polished question to classify.
+        max_attempts (int): Maximum number of judge attempts (default: 3).
 
     Returns:
-        str: The speech-act label returned by the model.
+        str: Label from ALLOWED_SPEECH_ACTS; "unverified" when every attempt
+            fails the judge.
 
     Example:
-        >>> _classify_question_speech_act("How do I request leave?")
+        >>> _classify_question_speech_act_with_judge("How do I request leave?")
         'instruction'
     """
-    # Build the generator user message.
-    user_message = _prepend_heading_to_question("Question", polished_question, None)
+    # Start with no feedback for the first attempt.
+    feedback = None
 
-    # Call the speech-act prompt once.
-    raw_output = _call(SPEECH_ACT_SYSTEM, user_message)
+    # Keep the unverified fallback unless the judge accepts a speech act.
+    classified_speech_act = "unverified"
 
-    # Parse the raw response into the speech-act schema.
-    speech_act_output = _parse(raw_output, Speech_Act_Classification)
+    # Track whether the judge accepted a speech-act output.
+    passed = False
 
-    # Return the assigned speech-act label.
-    classified_speech_act = speech_act_output.speech_act
+    for _ in range(max_attempts):
+        # Build the generator user message and call the speech-act prompt.
+        user_message = _prepend_heading_to_question("Question", polished_question, feedback)
+        raw_output = _call(SPEECH_ACT_SYSTEM, user_message)
+
+        # Parse the generator output into the speech-act schema.
+        try:
+            speech_act_output = _parse(raw_output, Speech_Act_Classification)
+        except (json.JSONDecodeError, ValidationError):
+            # Retry when the model returns no JSON or malformed JSON.
+            feedback = "Your previous response was not valid JSON matching the schema. Return only the JSON object."
+            continue
+
+        # Build the judge message from the question and speech-act output.
+        judge_message = _build_speech_act_judge_message(polished_question, speech_act_output)
+
+        # Call the judge and parse its verdict.
+        judge_raw = _call(SPEECH_ACT_JUDGE_SYSTEM, judge_message)
+        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+
+        # Stop when the judge accepts the speech-act output.
+        if verdict.passed == True:
+            passed = True
+            break
+
+        # Otherwise, format the feedback for the next attempt.
+        feedback = _format_feedback(verdict.failed_criteria, verdict.feedback)
+
+    # Use the speech act only when the judge accepted it.
+    if passed == True:
+        classified_speech_act = speech_act_output.speech_act
 
     return classified_speech_act
 
@@ -301,8 +384,17 @@ def topic_and_speech_act_node(state: Question_Extraction_State) -> dict:
     # Label each question with its topic and speech act.
     labeled_questions = []
     for polished_question in polished_questions:
+        topic_start = time.perf_counter()
         classified_topic = _classify_question_topic(polished_question)
-        classified_speech_act = _classify_question_speech_act(polished_question)
+        topic_ms = (time.perf_counter() - topic_start) * 1000
+        speech_act_start = time.perf_counter()
+        classified_speech_act = _classify_question_speech_act_with_judge(polished_question)
+        speech_act_ms = (time.perf_counter() - speech_act_start) * 1000
+        logging.info(
+            "[timing] topic_ms=%.1f speech_act_ms=%.1f",
+            topic_ms,
+            speech_act_ms,
+        )
         labeled_question = Topic_Speech_Act_Labeled(
             question=polished_question,
             topic=classified_topic,
