@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from backend.question_extraction import build_extraction_graph
-from backend.question_extraction.llm import MODEL
+from backend.question_extraction.llm import ACTIVE_CONFIG
 
 ROOT = Path(__file__).resolve().parent.parent
 QUERY_PATH = ROOT / "experiments" / "experiment_queries.json"
@@ -80,7 +80,7 @@ def main() -> None:
     timestamp_utc = current_time.isoformat()
     metadata = {}
     metadata["timestamp_utc"] = timestamp_utc
-    metadata["model"] = MODEL
+    metadata["model"] = ACTIVE_CONFIG.model
     metadata["max_attempts"] = MAX_ATTEMPTS
     metadata["entrypoint"] = "build_extraction_graph"
     metadata["experiment"] = EXPERIMENT_NAME

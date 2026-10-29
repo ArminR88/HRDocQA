@@ -5,9 +5,9 @@ import time
 from pydantic import ValidationError
 
 from .llm import (
-    _call,
+    _call_llm_returning_json,
     _format_feedback,
-    _parse,
+    _parse_json_into_pydantic_instance,
     _prepend_heading_to_question,
 )
 from .prompts import (
@@ -166,11 +166,11 @@ def _polish_raw_query_with_judge(raw_query: str) -> dict:
     for _ in range(3):
         # Build the generator user message and call the polish prompt.
         user_message = _prepend_heading_to_question("Raw query", raw_query, feedback)
-        raw_output = _call(POLISH_SYSTEM, user_message)
+        raw_output = _call_llm_returning_json(POLISH_SYSTEM, user_message)
 
         # Parse the generator output into the polish schema.
         try:
-            polished = _parse(raw_output, Polished_Questions)
+            polished = _parse_json_into_pydantic_instance(raw_output, Polished_Questions)
         except (json.JSONDecodeError, ValidationError):
             # Retry when the model returns no JSON or malformed JSON.
             feedback = "Your previous response was not valid JSON matching the schema. Return only the JSON object."
@@ -180,8 +180,11 @@ def _polish_raw_query_with_judge(raw_query: str) -> dict:
         judge_message = _build_polish_judge_message(raw_query, polished)
 
         # Call the judge and parse its verdict.
-        judge_raw = _call(POLISH_JUDGE_SYSTEM, judge_message)
-        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+        judge_raw = _call_llm_returning_json(POLISH_JUDGE_SYSTEM, judge_message)
+        verdict = _parse_json_into_pydantic_instance(
+            judge_raw,
+            Question_Extraction_Judge_Output,
+        )
 
         # Stop when the judge passes the output.
         if verdict.passed == True:
@@ -267,11 +270,14 @@ def _classify_question_topic(
     for _ in range(max_attempts):
         # Build the generator user message and call the topic prompt.
         user_message = _prepend_heading_to_question("Question", polished_question, feedback)
-        raw_output = _call(TOPIC_SYSTEM, user_message)
+        raw_output = _call_llm_returning_json(TOPIC_SYSTEM, user_message)
 
         # Parse the generator output into the topic schema.
         try:
-            topic_output = _parse(raw_output, Topic_Classification)
+            topic_output = _parse_json_into_pydantic_instance(
+                raw_output,
+                Topic_Classification,
+            )
         except (json.JSONDecodeError, ValidationError):
             # Retry when the model returns no JSON or malformed JSON.
             feedback = "Your previous response was not valid JSON matching the schema. Return only the JSON object."
@@ -281,8 +287,11 @@ def _classify_question_topic(
         judge_message = _build_topic_judge_message(polished_question, topic_output)
 
         # Call the judge and parse its verdict.
-        judge_raw = _call(TOPIC_JUDGE_SYSTEM, judge_message)
-        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+        judge_raw = _call_llm_returning_json(TOPIC_JUDGE_SYSTEM, judge_message)
+        verdict = _parse_json_into_pydantic_instance(
+            judge_raw,
+            Question_Extraction_Judge_Output,
+        )
 
         # Stop when the judge passes the output.
         if verdict.passed == True:
@@ -330,11 +339,14 @@ def _classify_question_speech_act_with_judge(
     for _ in range(max_attempts):
         # Build the generator user message and call the speech-act prompt.
         user_message = _prepend_heading_to_question("Question", polished_question, feedback)
-        raw_output = _call(SPEECH_ACT_SYSTEM, user_message)
+        raw_output = _call_llm_returning_json(SPEECH_ACT_SYSTEM, user_message)
 
         # Parse the generator output into the speech-act schema.
         try:
-            speech_act_output = _parse(raw_output, Speech_Act_Classification)
+            speech_act_output = _parse_json_into_pydantic_instance(
+                raw_output,
+                Speech_Act_Classification,
+            )
         except (json.JSONDecodeError, ValidationError):
             # Retry when the model returns no JSON or malformed JSON.
             feedback = "Your previous response was not valid JSON matching the schema. Return only the JSON object."
@@ -344,8 +356,11 @@ def _classify_question_speech_act_with_judge(
         judge_message = _build_speech_act_judge_message(polished_question, speech_act_output)
 
         # Call the judge and parse its verdict.
-        judge_raw = _call(SPEECH_ACT_JUDGE_SYSTEM, judge_message)
-        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+        judge_raw = _call_llm_returning_json(SPEECH_ACT_JUDGE_SYSTEM, judge_message)
+        verdict = _parse_json_into_pydantic_instance(
+            judge_raw,
+            Question_Extraction_Judge_Output,
+        )
 
         # Stop when the judge accepts the speech-act output.
         if verdict.passed == True:

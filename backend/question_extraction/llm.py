@@ -1,5 +1,6 @@
 import json
 import os
+from dataclasses import dataclass
 from typing import Type, TypeVar
 
 from dotenv import load_dotenv
@@ -10,35 +11,66 @@ load_dotenv()
 
 T = TypeVar("T", bound=BaseModel)
 
-MODEL = "deepseek-flash"
-BASE_URL = "https://api.deepseek.com"
-TEMPERATURE = 0
-def _call(system: str, user: str, model: str = MODEL) -> str:
+@dataclass(frozen=True)
+class LLM_Config:
     """
-    Run a single JSON-mode chat completion.
+    Description: Configuration for an LLM provider.
+
+    Arguments:
+        base_url (str): API base URL for the OpenAI-compatible client.
+        model (str): Model name to send in each request.
+        temperature (float): Sampling temperature.
+        api_key_env (str): Name of the environment variable holding the
+            API key.
+    """
+    base_url: str
+    model: str
+    temperature: float
+    api_key_env: str
+
+
+DEEPSEEK_FLASH = LLM_Config(
+    base_url="https://api.deepseek.com",
+    model="deepseek-flash",
+    temperature=0,
+    api_key_env="DEEPSEEK_API_KEY",
+)
+
+ACTIVE_CONFIG = DEEPSEEK_FLASH
+
+
+def _call_llm_returning_json(
+    system: str,
+    user: str,
+    config: LLM_Config = ACTIVE_CONFIG,
+) -> str:
+    """
+    Description: Call the active LLM provider and return the raw JSON response.
 
     Arguments:
         system (str): System prompt.
         user (str): User message.
-        model (str): DeepSeek model name.
+        config (LLM_Config): Active provider configuration.
 
     Returns:
         str: Raw JSON string returned by the model.
 
     Example:
-        >>> _call("Return JSON.", '{"q": "hi"}')
+        >>> _call_llm_returning_json("Return JSON.", '{"q": "hi"}')
         '{"ok": true}'
     """
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    client = OpenAI(base_url=BASE_URL, api_key=api_key)
+    api_key = os.environ.get(config.api_key_env)
+    client = OpenAI(base_url=config.base_url, api_key=api_key)
     system_message = {"role": "system", "content": system}
     user_message = {"role": "user", "content": user}
     messages = [system_message, user_message]
+    # DeepSeek accepts JSON-object mode; schema enforcement is deferred
+    # until a native provider path is added.
     response_format = {"type": "json_object"}
     completions = client.chat.completions
     response = completions.create(
-        model=model,
-        temperature=TEMPERATURE,
+        model=config.model,
+        temperature=config.temperature,
         response_format=response_format,
         messages=messages,
     )
@@ -48,9 +80,9 @@ def _call(system: str, user: str, model: str = MODEL) -> str:
     return content
 
 
-def _parse(raw: str, schema: Type[T]) -> T:
+def _parse_json_into_pydantic_instance(raw: str, schema: Type[T]) -> T:
     """
-    Parse a JSON string into a Pydantic model.
+    Description: Parse a JSON string into an instance of the given Pydantic schema.
 
     Arguments:
         raw (str): JSON text.
@@ -60,7 +92,7 @@ def _parse(raw: str, schema: Type[T]) -> T:
         T: Instance of the given schema.
 
     Example:
-        >>> _parse('{"topic": "vacation"}', Topic_Classification)
+        >>> _parse_json_into_pydantic_instance('{"topic": "vacation"}', Topic_Classification)
         Topic_Classification(topic='vacation')
     """
     data = json.loads(raw)

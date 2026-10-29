@@ -22,7 +22,19 @@ preserve_intent_criterion = (
 
 merge_or_split_criterion = (
     "merge_or_split",
-    "(a) Merge near-duplicate asks that share the same target and information need. Treat a hypothesis followed by a corrective rephrase of the same target (e.g. 'Is it X? If not, what is it?') as one ask. (b) Split asks that seek distinct outcomes or answers, even when connected by 'if not' (e.g. 'Can I carry over vacation? If not, can I cash it out?'). (c) After checking (a) and (b), if unsure whether two asks share the same information need, keep them separate. Copy only the specific context required to make each split question standalone; do not duplicate preamble that is not needed to answer that specific question. (d) Never split obvious paraphrases. Each item must represent exactly one ask. Never invent asks.",
+    "(a) Merge only when one answer necessarily resolves both asks. "
+    "If one ask is a yes/no about a specific element of a broader ask, merge "
+    "them. (b) Split asks that require independently determined answers: split "
+    "alternative methods, channels, or options for the same intended action, "
+    "whether in one question or across questions; split a general permission "
+    "from any limit or condition on it (numeric, eligibility, or scheduling). "
+    "If (a) and (b) both apply, split. (c) Treat two verbs as equivalent only "
+    "when they describe the same action, subject, and practical outcome (same "
+    "actor, object, and recipient); if equivalence cannot be established, split. "
+    "(d) Merge \"Is it X? If not, what is it?\" when both seek the same corrected "
+    "fact; split \"If not, can I do Y?\" when Y is a different action, permission, "
+    "decision, or remedy, keeping the condition in the split question. Preserve "
+    "all asks; invent none.",
 )
 
 output_contract_criterion = (

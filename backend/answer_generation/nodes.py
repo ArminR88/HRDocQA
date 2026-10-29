@@ -2,9 +2,9 @@ import json
 from typing import Any
 
 from backend.question_extraction.llm import (
-    _call,
+    _call_llm_returning_json,
     _format_feedback,
-    _parse,
+    _parse_json_into_pydantic_instance,
     _prepend_heading_to_question,
 )
 from backend.question_extraction.schema import (
@@ -178,17 +178,20 @@ def _answer_question_with_judge(question: dict[str, Any]) -> dict[str, Any]:
     for _ in range(3):
         # Build the generator user message and call the answer prompt.
         user_message = _prepend_heading_to_question("", generator_message, feedback)
-        raw_output = _call(ANSWER_SYSTEM, user_message)
+        raw_output = _call_llm_returning_json(ANSWER_SYSTEM, user_message)
 
         # Parse the generator output into the cited-answer schema.
-        output = _parse(raw_output, Cited_Answer)
+        output = _parse_json_into_pydantic_instance(raw_output, Cited_Answer)
 
         # Build the judge message from the same fields the generator saw.
         judge_message = _build_answer_judge_message(question_text, speech_act, chunks, output)
 
         # Call the judge and parse its verdict.
-        judge_raw = _call(ANSWER_JUDGE_SYSTEM, judge_message)
-        verdict = _parse(judge_raw, Question_Extraction_Judge_Output)
+        judge_raw = _call_llm_returning_json(ANSWER_JUDGE_SYSTEM, judge_message)
+        verdict = _parse_json_into_pydantic_instance(
+            judge_raw,
+            Question_Extraction_Judge_Output,
+        )
 
         # Stop when the judge passes the answer.
         if verdict.passed == True:
