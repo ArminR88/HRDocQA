@@ -4,12 +4,13 @@ import time
 
 from pydantic import ValidationError
 
-from .llm import (
+from backend.shared.llm import (
     _call_llm_returning_json,
     _format_feedback,
     _parse_json_into_pydantic_instance,
     _prepend_heading_to_question,
 )
+from backend.shared.schema import Judge_Output, Topic_Speech_Act_Labeled
 from .prompts import (
     POLISH_JUDGE_SYSTEM,
     POLISH_SYSTEM,
@@ -20,8 +21,6 @@ from .prompts import (
 )
 from .constants import ALLOWED_SPEECH_ACTS, ALLOWED_TOPICS
 from .schema import (
-    Question_Extraction_Judge_Output,
-    Topic_Speech_Act_Labeled,
     Question_Extraction_State,
     Polished_Questions,
     Speech_Act_Classification,
@@ -183,7 +182,7 @@ def _polish_raw_query_with_judge(raw_query: str) -> dict:
         judge_raw = _call_llm_returning_json(POLISH_JUDGE_SYSTEM, judge_message)
         verdict = _parse_json_into_pydantic_instance(
             judge_raw,
-            Question_Extraction_Judge_Output,
+            Judge_Output,
         )
 
         # Stop when the judge passes the output.
@@ -290,7 +289,7 @@ def _classify_question_topic(
         judge_raw = _call_llm_returning_json(TOPIC_JUDGE_SYSTEM, judge_message)
         verdict = _parse_json_into_pydantic_instance(
             judge_raw,
-            Question_Extraction_Judge_Output,
+            Judge_Output,
         )
 
         # Stop when the judge passes the output.
@@ -359,7 +358,7 @@ def _classify_question_speech_act_with_judge(
         judge_raw = _call_llm_returning_json(SPEECH_ACT_JUDGE_SYSTEM, judge_message)
         verdict = _parse_json_into_pydantic_instance(
             judge_raw,
-            Question_Extraction_Judge_Output,
+            Judge_Output,
         )
 
         # Stop when the judge accepts the speech-act output.

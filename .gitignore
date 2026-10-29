@@ -4,4 +4,5 @@ output_knowledge_base/
 __pycache__/
 *.py[cod]
 .env
-experiments/*.json
+experiments/answer_generation_exp_results/*.json
+experiments/question_cleaning_exp_results/*.json

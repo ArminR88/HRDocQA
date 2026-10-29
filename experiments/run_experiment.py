@@ -4,11 +4,11 @@ from pathlib import Path
 from typing import Any
 
 from backend.question_extraction import build_extraction_graph
-from backend.question_extraction.llm import ACTIVE_CONFIG
+from backend.shared.llm import ACTIVE_CONFIG
 
 ROOT = Path(__file__).resolve().parent.parent
-QUERY_PATH = ROOT / "experiments" / "experiment_queries.json"
-RESULT_PATH = ROOT / "experiments" / "question_extraction_results.json"
+QUERY_PATH = ROOT / "experiments" / "test_queries" / "experiment_queries.json"
+RESULT_PATH = ROOT / "experiments" / "question_cleaning_exp_results" / "question_extraction_results.json"
 MAX_ATTEMPTS = 3
 EXPERIMENT_NAME = "baseline_v1"
 

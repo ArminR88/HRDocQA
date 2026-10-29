@@ -4,7 +4,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
-from backend.question_extraction.schema import Topic_Speech_Act_Labeled
+from backend.shared.schema import Topic_Speech_Act_Labeled
 
 
 class Retrieval_Chunk(BaseModel):

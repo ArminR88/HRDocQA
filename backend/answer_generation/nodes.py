@@ -1,16 +1,13 @@
 import json
 from typing import Any
 
-from backend.question_extraction.llm import (
+from backend.shared.llm import (
     _call_llm_returning_json,
     _format_feedback,
     _parse_json_into_pydantic_instance,
     _prepend_heading_to_question,
 )
-from backend.question_extraction.schema import (
-    Question_Extraction_Judge_Output,
-    Topic_Speech_Act_Labeled,
-)
+from backend.shared.schema import Judge_Output, Topic_Speech_Act_Labeled
 
 from .prompts import ANSWER_JUDGE_SYSTEM, ANSWER_SYSTEM
 from .retrieval_helper import embed_query, retrieve_top_k
@@ -19,7 +16,7 @@ from .schema import Answer_Record, Answer_State, Cited_Answer, Retrieval_Chunk
 
 
 def _retrieve_question(question: Topic_Speech_Act_Labeled | dict[str, Any], question_index: int) -> dict[str, Any]:
-    """Summary: Add retrieval results and routing metadata to one labeled question.
+    """Description: Add retrieval results and routing metadata to one labeled question.
 
     Arguments:
         question: Question emitted by the analysis subgraph.
@@ -55,8 +52,8 @@ def _retrieve_question(question: Topic_Speech_Act_Labeled | dict[str, Any], ques
     return record
 
 
-def retrieval_node(state: Answer_State) -> dict[str, Any]:
-    """Summary: Retrieve matching chunks for every labeled question.
+def question_retrieval_node(state: Answer_State) -> dict[str, Any]:
+    """Description: Retrieve matching chunks for every labeled question.
 
     Arguments:
         state: Pipeline state after the analysis subgraph.
@@ -65,7 +62,7 @@ def retrieval_node(state: Answer_State) -> dict[str, Any]:
         State update containing retrieved question records.
 
     Example:
-        >>> retrieval_node({"topic_speech_act_labeled": [...]})
+        >>> question_retrieval_node({"topic_speech_act_labeled": [...]})
         {"topic_speech_act_labeled": [...]}
     """
     # Read the labeled questions.
@@ -190,7 +187,7 @@ def _answer_question_with_judge(question: dict[str, Any]) -> dict[str, Any]:
         judge_raw = _call_llm_returning_json(ANSWER_JUDGE_SYSTEM, judge_message)
         verdict = _parse_json_into_pydantic_instance(
             judge_raw,
-            Question_Extraction_Judge_Output,
+            Judge_Output,
         )
 
         # Stop when the judge passes the answer.
@@ -232,8 +229,8 @@ def _answer_question_with_judge(question: dict[str, Any]) -> dict[str, Any]:
     return answer_record.model_dump()
 
 
-def answer_node(state: Answer_State) -> dict[str, Any]:
-    """Summary: Generate answers for questions with retrieved evidence.
+def answer_generation_node(state: Answer_State) -> dict[str, Any]:
+    """Description: Generate answers for questions with retrieved evidence.
 
     Arguments:
         state: Pipeline state after retrieval.
@@ -242,7 +239,7 @@ def answer_node(state: Answer_State) -> dict[str, Any]:
         State update containing results from the answer branch.
 
     Example:
-        >>> answer_node({"topic_speech_act_labeled": [...]})
+        >>> answer_generation_node({"topic_speech_act_labeled": [...]})
         {"answer_results": [...]}
     """
     # Read questions with retrieval matches.
@@ -266,7 +263,7 @@ def answer_node(state: Answer_State) -> dict[str, Any]:
 
 
 def _build_no_match_record(question: dict[str, Any]) -> dict[str, Any]:
-    """Summary: Record the no-match failure for one question.
+    """Description: Record the no-match failure for one question.
 
     Arguments:
         question: Analyzed question with no chunks above threshold.
@@ -295,8 +292,8 @@ def _build_no_match_record(question: dict[str, Any]) -> dict[str, Any]:
     return answer_record.model_dump()
 
 
-def no_match_node(state: Answer_State) -> dict[str, Any]:
-    """Summary: Record the no-match failure for questions without evidence.
+def no_match_record_node(state: Answer_State) -> dict[str, Any]:
+    """Description: Record the no-match failure for questions without evidence.
 
     Arguments:
         state: Pipeline state after retrieval.
@@ -305,7 +302,7 @@ def no_match_node(state: Answer_State) -> dict[str, Any]:
         State update containing results from the no-match branch.
 
     Example:
-        >>> no_match_node({"topic_speech_act_labeled": [...]})
+        >>> no_match_record_node({"topic_speech_act_labeled": [...]})
         {"no_match_results": [...]}
     """
     # Read questions without retrieval matches.
@@ -328,8 +325,8 @@ def no_match_node(state: Answer_State) -> dict[str, Any]:
     return update
 
 
-def join_node(state: Answer_State) -> dict[str, Any]:
-    """Summary: Join answer and no-match branch results in question order.
+def join_answer_results_node(state: Answer_State) -> dict[str, Any]:
+    """Description: Join answer and no-match branch results in question order.
 
     Arguments:
         state: Pipeline state containing branch results.
@@ -338,7 +335,7 @@ def join_node(state: Answer_State) -> dict[str, Any]:
         State update with final labeled question records and final message.
 
     Example:
-        >>> join_node({"topic_speech_act_labeled": [...], "answer_results": [...], "no_match_results": [...]})
+        >>> join_answer_results_node({"topic_speech_act_labeled": [...], "answer_results": [...], "no_match_results": [...]})
         {"topic_speech_act_labeled": [...], "final_message": "..."}
     """
     # Collect answer and no-match results.
