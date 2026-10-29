@@ -362,55 +362,115 @@ def _classify_question_speech_act_with_judge(
     return classified_speech_act
 
 
-def topic_and_speech_act_node(state: Question_Extraction_State) -> dict:
+def topic_classify_node(state: Question_Extraction_State) -> dict:
     """
-    Description: Assign a topic and speech act to every polished question.
+    Description: Assign a topic label to every polished question.
 
     Arguments:
-        state (Question_Extraction_State): Current graph state with
-            polished_questions set.
+        state (Question_Extraction_State): Current graph state containing
+            polished_questions.
 
     Returns:
-        dict: State update whose topic_speech_act_labeled holds one
-            Topic_Speech_Act_Labeled per question.
+        dict: State update containing the topic_labels list.
 
     Example:
-        >>> topic_and_speech_act_node({"polished_questions": ["How do I request leave?", "Is leave paid?"]})
-        {'topic_speech_act_labeled': [Topic_Speech_Act_Labeled(question='How do I request leave?', topic='unidentified', speech_act='instruction'), Topic_Speech_Act_Labeled(question='Is leave paid?', topic='parental_leave', speech_act='factual')]}
+        >>> topic_classify_node({"polished_questions": ["How do I request leave?"]})
+        {'topic_labels': ['unidentified']}
     """
     # Read the polished questions from the state.
     polished_questions = state["polished_questions"]
 
-    # Label each question with its topic and speech act.
-    labeled_questions = []
+    # Classify each polished question by topic.
+    topic_labels = []
     for polished_question in polished_questions:
-        topic_start = time.perf_counter()
-        classified_topic = _classify_question_topic(polished_question)
-        topic_ms = (time.perf_counter() - topic_start) * 1000
-        speech_act_start = time.perf_counter()
-        classified_speech_act = _classify_question_speech_act_with_judge(polished_question)
-        speech_act_ms = (time.perf_counter() - speech_act_start) * 1000
-        logging.info(
-            "[timing] topic_ms=%.1f speech_act_ms=%.1f",
-            topic_ms,
-            speech_act_ms,
-        )
-        labeled_question = Topic_Speech_Act_Labeled(
-            question=polished_question,
-            topic=classified_topic,
-            speech_act=classified_speech_act,
-        )
-        labeled_questions.append(labeled_question)
+        start = time.perf_counter()
+        label = _classify_question_topic(polished_question)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logging.info("[timing] topic_ms=%.1f", elapsed_ms)
+        topic_labels.append(label)
 
-    # Log a concise summary of the node result.
-    question_count = len(labeled_questions)
-    logging.info(
-        "[node:topic_and_speech_act] classified %d questions",
-        question_count,
-    )
-
-    # Build the state update.
     state_update = {}
-    state_update["topic_speech_act_labeled"] = labeled_questions
+    state_update["topic_labels"] = topic_labels
+    return state_update
 
+
+def speech_act_classify_node(state: Question_Extraction_State) -> dict:
+    """
+    Description: Assign a speech-act label to every polished question.
+
+    Arguments:
+        state (Question_Extraction_State): Current graph state containing
+            polished_questions.
+
+    Returns:
+        dict: State update containing the speech_act_labels list.
+
+    Example:
+        >>> speech_act_classify_node({"polished_questions": ["How do I request leave?"]})
+        {'speech_act_labels': ['instruction']}
+    """
+    # Read the polished questions from the state.
+    polished_questions = state["polished_questions"]
+
+    # Classify each polished question by speech act.
+    speech_act_labels = []
+    for polished_question in polished_questions:
+        start = time.perf_counter()
+        label = _classify_question_speech_act_with_judge(polished_question)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logging.info("[timing] speech_act_ms=%.1f", elapsed_ms)
+        speech_act_labels.append(label)
+
+    state_update = {}
+    state_update["speech_act_labels"] = speech_act_labels
+    return state_update
+
+
+def join_labels_node(state: Question_Extraction_State) -> dict:
+    """
+    Description: Join topic and speech-act labels in polished-question order.
+
+    Arguments:
+        state (Question_Extraction_State): Current graph state containing
+            polished_questions, topic_labels, and speech_act_labels.
+
+    Returns:
+        dict: State update containing topic_speech_act_labeled.
+
+    Example:
+        >>> join_labels_node({"polished_questions": ["How do I request leave?"], "topic_labels": ["unidentified"], "speech_act_labels": ["instruction"]})
+        {'topic_speech_act_labeled': [Topic_Speech_Act_Labeled(question='How do I request leave?', topic='unidentified', speech_act='instruction')]}
+    """
+    # Read the source questions and both ordered label lists.
+    polished_questions = state["polished_questions"]
+    topic_labels = state["topic_labels"]
+    speech_act_labels = state["speech_act_labels"]
+
+    # Require each classification branch to return one label per question.
+    if not (
+        len(topic_labels) == len(speech_act_labels) == len(polished_questions)
+    ):
+        raise ValueError(
+            "Label lengths must match: "
+            f"polished_questions={len(polished_questions)}, "
+            f"topic_labels={len(topic_labels)}, "
+            f"speech_act_labels={len(speech_act_labels)}"
+        )
+
+    # Combine the question and its two labels in their original order.
+    labeled = []
+    for question, topic, speech_act in zip(
+        polished_questions,
+        topic_labels,
+        speech_act_labels,
+    ):
+        labeled_question = Topic_Speech_Act_Labeled(
+            question=question,
+            topic=topic,
+            speech_act=speech_act,
+        )
+        labeled.append(labeled_question)
+
+    state_update = {}
+    state_update["topic_speech_act_labeled"] = labeled
     return state_update

@@ -66,7 +66,7 @@ class Topic_Speech_Act_Labeled(BaseModel):
     """
     Description:
         One polished question with its topic and speech-act labels. The unit
-        produced by topic_and_speech_act_node and stored in
+        produced by join_labels_node and stored in
         Question_Extraction_State.topic_speech_act_labeled.
 
     Arguments:
@@ -83,20 +83,27 @@ class Question_Extraction_State(TypedDict, total=False):
     """
     Description:
         Shared graph state of the question-extraction subgraph. Accumulates the
-        raw query, the polish stage's output, the classify stage's output, and
-        an optional failure message.
+        raw query, the polish stage's output, parallel topic and speech-act
+        labels consumed by the join node, joined labels, and an optional
+        failure message.
 
     Arguments:
         raw_query (str): the original user input.
         polish_status (Literal["ok", "failed"]): set by the polish stage.
         polished_questions (list[str]): standalone questions produced by the
             polish stage.
+        topic_labels (list[str]): topic labels produced by the topic classify
+            node and consumed by the join node.
+        speech_act_labels (list[str]): speech-act labels produced by the
+            speech-act classify node and consumed by the join node.
         topic_speech_act_labeled (list[Topic_Speech_Act_Labeled]): classified
-            questions produced by topic_and_speech_act_node.
+            questions produced by the join node.
         final_message (str): fixed failure text, set only on the failure branch.
     """
     raw_query: str
     polish_status: Literal["ok", "failed"]
     polished_questions: list[str]
+    topic_labels: list[str]
+    speech_act_labels: list[str]
     topic_speech_act_labeled: list[Topic_Speech_Act_Labeled]
     final_message: str

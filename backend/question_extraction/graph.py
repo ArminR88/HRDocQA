@@ -1,25 +1,51 @@
 from langgraph.graph import END, START, StateGraph
 
-from .nodes import question_polish_node, topic_and_speech_act_node
+from .nodes import (
+    join_labels_node,
+    question_polish_node,
+    speech_act_classify_node,
+    topic_classify_node,
+)
 from .schema import Question_Extraction_State
 
 
-def _route_after_polish(state: Question_Extraction_State) -> str:
+def _route_after_polish_to_topic(state: Question_Extraction_State) -> str:
     """
-    Route from polish to classification or graph end.
+    Description: Route from polish to topic classification or graph end.
 
     Arguments:
         state (Question_Extraction_State): Current graph state with polish_status set.
 
     Returns:
-        str: Next route name, either "topic_and_speech_act" or "end".
+        str: Next route name, either "topic_classify" or "end".
 
     Example:
-        >>> _route_after_polish({"polish_status": "ok"})
-        'topic_and_speech_act'
+        >>> _route_after_polish_to_topic({"polish_status": "ok"})
+        'topic_classify'
     """
     if state["polish_status"] == "ok":
-        return "topic_and_speech_act"
+        return "topic_classify"
+    return "end"
+
+
+def _route_after_polish_to_speech_act(
+    state: Question_Extraction_State,
+) -> str:
+    """
+    Route from polish to speech-act classification or graph end.
+
+    Arguments:
+        state (Question_Extraction_State): Current graph state with polish_status set.
+
+    Returns:
+        str: Next route name, either "speech_act_classify" or "end".
+
+    Example:
+        >>> _route_after_polish_to_speech_act({"polish_status": "ok"})
+        'speech_act_classify'
+    """
+    if state["polish_status"] == "ok":
+        return "speech_act_classify"
     return "end"
 
 
@@ -39,14 +65,23 @@ def build_extraction_graph():
     """
     graph = StateGraph(Question_Extraction_State)
     graph.add_node("polish", question_polish_node)
-    graph.add_node("topic_and_speech_act", topic_and_speech_act_node)
+    graph.add_node("topic_classify", topic_classify_node)
+    graph.add_node("speech_act_classify", speech_act_classify_node)
+    graph.add_node("join_labels", join_labels_node)
     graph.add_edge(START, "polish")
-    # Route polish failures directly to graph end.
+    # Fan out to two parallel branches on success; failures end the graph.
     graph.add_conditional_edges(
         "polish",
-        _route_after_polish,
-        {"topic_and_speech_act": "topic_and_speech_act", "end": END},
+        _route_after_polish_to_topic,
+        {"topic_classify": "topic_classify", "end": END},
     )
-    graph.add_edge("topic_and_speech_act", END)
+    graph.add_conditional_edges(
+        "polish",
+        _route_after_polish_to_speech_act,
+        {"speech_act_classify": "speech_act_classify", "end": END},
+    )
+    graph.add_edge("topic_classify", "join_labels")
+    graph.add_edge("speech_act_classify", "join_labels")
+    graph.add_edge("join_labels", END)
     compiled = graph.compile()
     return compiled
