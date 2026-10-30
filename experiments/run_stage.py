@@ -1,11 +1,10 @@
 import argparse
 import json
 import logging
-import sys
-import traceback
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any
 
 from backend.answer_generation import build_answer_graph
 from backend.question_extraction import build_extraction_graph
@@ -72,83 +71,38 @@ def _extraction_record(query: dict[str, Any], state: dict[str, Any]) -> dict[str
     return record
 
 
-def _report_query_error(query_id: Any) -> NoReturn:
+def stream_graph_with_timings(
+    graph: Any,
+    raw_query: str,
+) -> tuple[dict[str, Any], dict[str, float]]:
     """
     Description:
-        Print the active query id and traceback after a graph invocation fails.
+        Stream the graph for one query and record elapsed time per node.
 
     Arguments:
-        query_id (Any): Id of the query whose graph invocation failed.
+        graph (Any): Compiled graph to run.
+        raw_query (str): The raw query to process.
 
     Returns:
-        None: Exits with a failure status after printing the traceback.
+        tuple[dict[str, Any], dict[str, float]]: Final state and per-node
+            timings in seconds.
     """
-    print(f"Query {query_id} failed; stopping the run.", file=sys.stderr)
-    traceback.print_exc()
-    raise SystemExit(1)
+    # Record the start time and initialise the accumulators.
+    timings = {}
+    previous_time = time.perf_counter()
+    state = {}
+    # Stream node updates; measure the gap between consecutive events.
+    for chunk in graph.stream({"raw_query": raw_query}, stream_mode="updates"):
+        now = time.perf_counter()
+        elapsed = now - previous_time
+        for node_name in chunk:
+            timings[node_name] = timings.get(node_name, 0.0) + elapsed
+        previous_time = now
+        for node_name, node_update in chunk.items():
+            state.update(node_update)
 
-
-def run_question_cleaning(queries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """
-    Description:
-        Run only the extraction graph for each supplied query.
-
-    Arguments:
-        queries (list[dict[str, Any]]): Query records to process.
-
-    Returns:
-        list[dict[str, Any]]: Extraction records in query order.
-    """
-    graph = build_extraction_graph()
-    records = []
-    for query in queries:
-        query_id = query["id"]
-        raw_query = query["raw_query"]
-        try:
-            state = graph.invoke({"raw_query": raw_query})
-        except Exception:
-            _report_query_error(query_id)
-        record = _extraction_record(query, state)
-        records.append(record)
-    return records
-
-
-def run_answer_generation(
-    queries: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """
-    Description:
-        Run the answer graph once for each supplied query.
-
-    Arguments:
-        queries (list[dict[str, Any]]): Query records to process.
-
-    Returns:
-        tuple[list[dict[str, Any]], list[dict[str, Any]]]: Extraction records
-            and full answer-generation records, in query order.
-    """
-    graph = build_answer_graph()
-    extraction_records = []
-    answer_records = []
-    for query in queries:
-        query_id = query["id"]
-        raw_query = query["raw_query"]
-        try:
-            state = graph.invoke({"raw_query": raw_query})
-        except Exception:
-            _report_query_error(query_id)
-        extraction_record = _extraction_record(query, state)
-        extraction_records.append(extraction_record)
-
-        answer_record = dict(extraction_record)
-        answer_record["answer_results"] = _json_value(state.get("answer_results", []))
-        answer_record["no_match_results"] = _json_value(state.get("no_match_results", []))
-        answer_record["final_message"] = state.get("final_message")
-        answer_record["topic_speech_act_labeled"] = _json_value(
-            state.get("topic_speech_act_labeled", [])
-        )
-        answer_records.append(answer_record)
-    return extraction_records, answer_records
+    # Return the accumulated state and timings.
+    return state, timings
 
 
 def write_results(path: Path, records: list[dict[str, Any]], metadata: dict[str, Any]) -> None:
@@ -190,6 +144,41 @@ def _parse_query_ids(value: str) -> list[str]:
             raise argparse.ArgumentTypeError("--query-ids must contain comma-separated ids")
         query_ids.append(query_id)
     return query_ids
+
+
+def _stage_totals(
+    run_timings: dict[str, float],
+    stage: str,
+) -> tuple[dict[str, float], float]:
+    """
+    Description:
+        Compute per-stage totals and the run total from per-node timings.
+
+    Arguments:
+        run_timings (dict[str, float]): Accumulated per-node seconds
+            across all queries.
+        stage (str): The `--stage` value that produced the run.
+
+    Returns:
+        tuple[dict[str, float], float]: Stage totals in seconds, and the
+            run total in seconds.
+    """
+    stage_totals = {}
+    if stage == "question_cleaning":
+        total_seconds = 0.0
+        for node_name in run_timings:
+            total_seconds = total_seconds + run_timings[node_name]
+        stage_totals["question_extraction"] = round(total_seconds, 2)
+        return stage_totals, round(total_seconds, 2)
+
+    question_extraction_seconds = run_timings.get("question_extraction", 0.0)
+    answer_generation_seconds = 0.0
+    for node_name in ("retrieval", "answer", "no_match", "join", "failure"):
+        answer_generation_seconds = answer_generation_seconds + run_timings.get(node_name, 0.0)
+    stage_totals["question_extraction"] = round(question_extraction_seconds, 2)
+    stage_totals["answer_generation"] = round(answer_generation_seconds, 2)
+    total_seconds = question_extraction_seconds + answer_generation_seconds
+    return stage_totals, round(total_seconds, 2)
 
 
 def main() -> None:
@@ -239,18 +228,57 @@ def main() -> None:
     for query in queries:
         metadata["query_ids"].append(query["id"])
 
+    query_timings = []
+    extraction_records = []
+    answer_records = []
     if args.stage == "question_cleaning":
-        records = run_question_cleaning(queries)
+        graph = build_extraction_graph()
+    else:
+        graph = build_answer_graph()
+
+    for query in queries:
+        state, timings = stream_graph_with_timings(graph, query["raw_query"])
+
+        entry = {}
+        entry["query_id"] = query["id"]
+        for node_name, seconds in timings.items():
+            entry[node_name] = round(seconds, 2)
+        query_timings.append(entry)
+
+        extraction_record = _extraction_record(query, state)
+        extraction_records.append(extraction_record)
+        if args.stage != "question_cleaning":
+            answer_record = dict(extraction_record)
+            answer_record["answer_results"] = _json_value(state.get("answer_results", []))
+            answer_record["no_match_results"] = _json_value(state.get("no_match_results", []))
+            answer_record["final_message"] = state.get("final_message")
+            answer_record["topic_speech_act_labeled"] = _json_value(state.get("topic_speech_act_labeled", []))
+            answer_records.append(answer_record)
+
+    run_timings = {}
+    for entry in query_timings:
+        for node_name, seconds in entry.items():
+            if node_name == "query_id":
+                continue
+            run_timings[node_name] = run_timings.get(node_name, 0.0) + seconds
+
+    metadata["query_timings_seconds"] = query_timings
+    metadata["totals_seconds"] = {}
+    for node_name, seconds in run_timings.items():
+        metadata["totals_seconds"][node_name] = round(seconds, 2)
+    stage_totals, total_seconds = _stage_totals(run_timings, args.stage)
+    metadata["stage_totals_seconds"] = stage_totals
+    metadata["total_seconds"] = total_seconds
+
+    if args.stage == "question_cleaning":
         path = QUESTION_CLEANING_DIR / f"run_{timestamp}.json"
-        write_results(path, records, metadata)
+        write_results(path, extraction_records, metadata)
     elif args.stage == "answer_generation":
-        answer_records = run_answer_generation(queries)[1]
         path = ANSWER_GENERATION_DIR / f"run_{timestamp}.json"
         write_results(path, answer_records, metadata)
     else:
         extraction_path = QUESTION_CLEANING_DIR / f"run_{timestamp}_from_both.json"
         answer_path = ANSWER_GENERATION_DIR / f"run_{timestamp}_from_both.json"
-        extraction_records, answer_records = run_answer_generation(queries)
         write_results(extraction_path, extraction_records, metadata)
         write_results(answer_path, answer_records, metadata)
 
