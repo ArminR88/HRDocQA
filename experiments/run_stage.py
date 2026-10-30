@@ -126,6 +126,23 @@ def write_results(path: Path, records: list[dict[str, Any]], metadata: dict[str,
         result_file.write(f"{serialized}\n")
 
 
+def write_timing(path: Path, metadata: dict[str, Any]) -> None:
+    """
+    Description:
+        Exclusively create a JSON timing file without overwriting existing data.
+
+    Arguments:
+        path (Path): Destination file path in an existing output directory.
+        metadata (dict[str, Any]): Timing data written to the file.
+
+    Returns:
+        None: Writes the serialized timing record to path.
+    """
+    serialized = json.dumps(metadata, indent=2, ensure_ascii=False)
+    with open(path, "x", encoding="utf-8") as timing_file:
+        timing_file.write(f"{serialized}\n")
+
+
 def _parse_query_ids(value: str) -> list[str]:
     """
     Description:
@@ -221,12 +238,20 @@ def main() -> None:
                 queries.append(query)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    metadata = {}
-    metadata["timestamp"] = timestamp
-    metadata["stage"] = args.stage
-    metadata["query_ids"] = []
+    result_metadata = {}
+    result_metadata["timestamp"] = timestamp
+    result_metadata["stage"] = args.stage
+    result_metadata["query_ids"] = []
     for query in queries:
-        metadata["query_ids"].append(query["id"])
+        result_metadata["query_ids"].append(query["id"])
+
+    timing_metadata = {}
+    timing_metadata["metadata"] = {}
+    timing_metadata["metadata"]["timestamp"] = timestamp
+    timing_metadata["metadata"]["stage"] = args.stage
+    timing_metadata["metadata"]["query_ids"] = []
+    for query in queries:
+        timing_metadata["metadata"]["query_ids"].append(query["id"])
 
     query_timings = []
     extraction_records = []
@@ -262,25 +287,33 @@ def main() -> None:
                 continue
             run_timings[node_name] = run_timings.get(node_name, 0.0) + seconds
 
-    metadata["query_timings_seconds"] = query_timings
-    metadata["totals_seconds"] = {}
+    timing_metadata["query_timings_seconds"] = query_timings
+    timing_metadata["totals_seconds"] = {}
     for node_name, seconds in run_timings.items():
-        metadata["totals_seconds"][node_name] = round(seconds, 2)
+        timing_metadata["totals_seconds"][node_name] = round(seconds, 2)
     stage_totals, total_seconds = _stage_totals(run_timings, args.stage)
-    metadata["stage_totals_seconds"] = stage_totals
-    metadata["total_seconds"] = total_seconds
+    timing_metadata["stage_totals_seconds"] = stage_totals
+    timing_metadata["total_seconds"] = total_seconds
 
     if args.stage == "question_cleaning":
-        path = QUESTION_CLEANING_DIR / f"run_{timestamp}.json"
-        write_results(path, extraction_records, metadata)
+        result_path = QUESTION_CLEANING_DIR / f"run_{timestamp}.json"
+        timing_path = QUESTION_CLEANING_DIR / f"run_{timestamp}_timing.json"
+        write_results(result_path, extraction_records, result_metadata)
+        write_timing(timing_path, timing_metadata)
     elif args.stage == "answer_generation":
-        path = ANSWER_GENERATION_DIR / f"run_{timestamp}.json"
-        write_results(path, answer_records, metadata)
+        result_path = ANSWER_GENERATION_DIR / f"run_{timestamp}.json"
+        timing_path = ANSWER_GENERATION_DIR / f"run_{timestamp}_timing.json"
+        write_results(result_path, answer_records, result_metadata)
+        write_timing(timing_path, timing_metadata)
     else:
-        extraction_path = QUESTION_CLEANING_DIR / f"run_{timestamp}_from_both.json"
-        answer_path = ANSWER_GENERATION_DIR / f"run_{timestamp}_from_both.json"
-        write_results(extraction_path, extraction_records, metadata)
-        write_results(answer_path, answer_records, metadata)
+        extraction_result_path = QUESTION_CLEANING_DIR / f"run_{timestamp}_from_both.json"
+        extraction_timing_path = QUESTION_CLEANING_DIR / f"run_{timestamp}_from_both_timing.json"
+        answer_result_path = ANSWER_GENERATION_DIR / f"run_{timestamp}_from_both.json"
+        answer_timing_path = ANSWER_GENERATION_DIR / f"run_{timestamp}_from_both_timing.json"
+        write_results(extraction_result_path, extraction_records, result_metadata)
+        write_timing(extraction_timing_path, timing_metadata)
+        write_results(answer_result_path, answer_records, result_metadata)
+        write_timing(answer_timing_path, timing_metadata)
 
 
 if __name__ == "__main__":

@@ -19,18 +19,18 @@ def _route_after_extraction(state: Answer_State) -> str:
         state (Answer_State): State returned by the question-extraction subgraph.
 
     Returns:
-        The retrieval route after successful extraction or the failure route otherwise.
+        The question-retrieval route after successful extraction or the answer-failure route otherwise.
 
     Example:
         >>> _route_after_extraction({"polish_status": "ok"})
-        "retrieval"
+        "question_retrieval"
         >>> _route_after_extraction({"polish_status": "failed"})
-        "failure"
+        "answer_failure"
     """
     if state["polish_status"] == "ok":
-        route = "retrieval"
+        route = "question_retrieval"
     else:
-        route = "failure"
+        route = "answer_failure"
     return route
 
 
@@ -45,7 +45,7 @@ def _route_after_retrieval(state: Answer_State) -> list[str]:
 
     Example:
         >>> _route_after_retrieval({"topic_speech_act_labeled": [...]})
-        ["answer", "no_match"]
+        ["answer_generation", "no_match_record"]
     """
     labeled_questions = state["topic_speech_act_labeled"]
     has_retrieved = False
@@ -59,9 +59,9 @@ def _route_after_retrieval(state: Answer_State) -> list[str]:
 
     routes = []
     if has_retrieved:
-        routes.append("answer")
+        routes.append("answer_generation")
     if has_no_match:
-        routes.append("no_match")
+        routes.append("no_match_record")
     return routes
 
 
@@ -80,25 +80,25 @@ def build_answer_graph():
     """
     graph = StateGraph(Answer_State)
     graph.add_node("question_extraction", build_extraction_graph())
-    graph.add_node("failure", answer_failure_node)
-    graph.add_node("retrieval", question_retrieval_node)
-    graph.add_node("answer", answer_generation_node)
-    graph.add_node("no_match", no_match_record_node)
-    graph.add_node("join", join_answer_results_node)
+    graph.add_node("answer_failure", answer_failure_node)
+    graph.add_node("question_retrieval", question_retrieval_node)
+    graph.add_node("answer_generation", answer_generation_node)
+    graph.add_node("no_match_record", no_match_record_node)
+    graph.add_node("join_answer_results", join_answer_results_node)
     graph.add_edge(START, "question_extraction")
     graph.add_conditional_edges(
         "question_extraction",
         _route_after_extraction,
-        {"retrieval": "retrieval", "failure": "failure"},
+        {"question_retrieval": "question_retrieval", "answer_failure": "answer_failure"},
     )
-    graph.add_edge("failure", END)
+    graph.add_edge("answer_failure", END)
     graph.add_conditional_edges(
-        "retrieval",
+        "question_retrieval",
         _route_after_retrieval,
-        {"answer": "answer", "no_match": "no_match"},
+        {"answer_generation": "answer_generation", "no_match_record": "no_match_record"},
     )
-    graph.add_edge("answer", "join")
-    graph.add_edge("no_match", "join")
-    graph.add_edge("join", END)
+    graph.add_edge("answer_generation", "join_answer_results")
+    graph.add_edge("no_match_record", "join_answer_results")
+    graph.add_edge("join_answer_results", END)
     compiled = graph.compile()
     return compiled
