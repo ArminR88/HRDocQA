@@ -1,5 +1,9 @@
 import json
+import logging
+import time
 from typing import Any
+
+from pydantic import ValidationError
 
 from backend.shared.llm import (
     _call_llm_returning_json,
@@ -71,7 +75,10 @@ def question_retrieval_node(state: Answer_State) -> dict[str, Any]:
     # Retrieve chunks for each labeled question.
     retrieved_questions = []
     for question_index, question in enumerate(labeled_questions):
+        start = time.perf_counter()
         retrieved_question = _retrieve_question(question, question_index)
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logging.info("[timing] retrieval_ms=%.1f", elapsed_ms)
         retrieved_questions.append(retrieved_question)
 
     # Return the retrieval results.
@@ -118,26 +125,26 @@ def _build_answer_judge_message(
     output: Cited_Answer,
 ) -> str:
     """
-    Description: Build the answer judge's input from structured answer fields.
+    Description: Build the judge message for the answer stage.
 
     Arguments:
         question_text (str): The question being answered.
-        speech_act (str): The question's speech-act label.
-        chunks (list[Retrieval_Chunk]): Retrieved chunks supplied to the generator.
-        output (Cited_Answer): Candidate answer and citations.
+        speech_act (str): "instruction", "factual", or "unverified".
+        chunks (list[Retrieval_Chunk]): Retrieved chunks supplying evidence.
+        output (Cited_Answer): Candidate answer and cited chunk ids.
 
     Returns:
-        str: The serialized judge input.
+        str: JSON judge message.
     """
     # Collect the question, speech act, retrieved chunks, and candidate answer.
     judge_payload = {}
     judge_payload["question"] = question_text
     judge_payload["speech_act"] = speech_act
-    retrieved_chunks = []
+    retrieved_chunk_records = []
     for chunk in chunks:
         chunk_record = chunk.model_dump()
-        retrieved_chunks.append(chunk_record)
-    judge_payload["retrieved_chunks"] = retrieved_chunks
+        retrieved_chunk_records.append(chunk_record)
+    judge_payload["retrieved_chunks"] = retrieved_chunk_records
     judge_payload["answer"] = output.answer
     judge_payload["cited_chunk_ids"] = output.cited_chunk_ids
 
@@ -170,15 +177,22 @@ def _answer_question_with_judge(question: dict[str, Any]) -> dict[str, Any]:
     )
 
     # Run the retry-and-judge loop.
+    start = time.perf_counter()
     feedback = None
     passed = False
+    output = Cited_Answer(answer="", cited_chunk_ids=[])
     for _ in range(3):
         # Build the generator user message and call the answer prompt.
         user_message = _prepend_heading_to_question("", generator_message, feedback)
         raw_output = _call_llm_returning_json(ANSWER_SYSTEM, user_message)
 
         # Parse the generator output into the cited-answer schema.
-        output = _parse_json_into_pydantic_instance(raw_output, Cited_Answer)
+        try:
+            output = _parse_json_into_pydantic_instance(raw_output, Cited_Answer)
+        except (json.JSONDecodeError, ValidationError):
+            # Retry when the model returns no JSON or malformed JSON.
+            feedback = "Your previous response was not valid JSON matching the schema. Return only the JSON object."
+            continue
 
         # Build the judge message from the same fields the generator saw.
         judge_message = _build_answer_judge_message(question_text, speech_act, chunks, output)
@@ -197,6 +211,9 @@ def _answer_question_with_judge(question: dict[str, Any]) -> dict[str, Any]:
 
         # Format feedback for the next attempt.
         feedback = _format_feedback(verdict.failed_criteria, verdict.feedback)
+
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    logging.info("[timing] answer_ms=%.1f", elapsed_ms)
 
     # Select the chunks that the answer cited.
     cited_ids = output.cited_chunk_ids

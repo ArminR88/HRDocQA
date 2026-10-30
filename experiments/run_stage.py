@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import sys
 import traceback
 from datetime import datetime
@@ -213,7 +214,12 @@ def main() -> None:
         type=_parse_query_ids,
         help="Comma-separated query ids; defaults to all queries.",
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable INFO logging to capture [timing] lines.")
     args = parser.parse_args()
+    if args.verbose == True:
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    else:
+        logging.basicConfig(level=logging.WARNING, format="%(asctime)s | %(levelname)s | %(message)s")
 
     all_queries = json.loads(QUERY_PATH.read_text(encoding="utf-8"))
 
