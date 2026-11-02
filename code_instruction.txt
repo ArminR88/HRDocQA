@@ -1,0 +1,196 @@
+# Coding Instructions
+
+These rules apply to every source file in this repository. They were refined
+over several refactors and are meant to be applied uniformly. When a task's
+prompt conflicts with this file, this file wins unless the prompt explicitly
+overrides a specific rule.
+
+## 1. Scope discipline
+
+- Change only the files the task names. If a change requires touching a file
+  outside the stated scope, stop and report the file and line before editing.
+- Do not expand scope mid-task. If a verification step reveals an issue in a
+  file you were not asked to touch, report it; do not fix it.
+- Work one function at a time when refactoring. Finish and verify one
+  function before starting the next, unless the task explicitly groups them.
+
+## 2. Code style
+
+- **One action per line.** Every line performs one meaningful step. Do not
+  chain calls, do not combine a call with an index, do not put multiple
+  statements on one line.
+- **No comprehensions.** Replace list, set, and dict comprehensions with
+  explicit `for` loops that build the result.
+- **No generator expressions.** A generator function (one that yields) is
+  acceptable; a generator expression is not.
+- **No anonymous functions.** Replace `lambda` with a named helper or a
+  standard-library equivalent (`operator.itemgetter`, `functools.reduce`).
+- **No partial application.** Pass the arguments the function needs, or pass
+  a bound method.
+- **No nested function definitions.** All functions are top-level.
+- **No new classes** unless the task explicitly asks for one.
+- **No function-as-argument** unless the task explicitly requires a callback.
+  If a helper exists only to be passed as an argument, inline its body at
+  the call site.
+
+## 3. Naming
+
+- **Functions:** verb + object (+ qualifier). Names say what the function
+  does and on what.
+- **Variables:** specific, not generic. Prefer `polished_questions` over
+  `output`, `state_update` over `update`, `question_text` over `text`.
+- **Classes:** multi-word names use a consistent separator within a
+  codebase. Pick one (underscore or camel case) and apply it everywhere.
+- **Constants:** screaming snake case. Group related constants and derive
+  lists from their source of truth (e.g. `ALLOWED = list(DEFINITIONS)`) so
+  the two cannot drift.
+- **Files and modules:** name them for what they contain, not for their role
+  in a pipeline.
+
+## 4. Docstrings
+
+Every function, method, class, and module has a docstring in this format:
+
+    """
+    Description: <one sentence>.
+
+    Arguments:
+        name (type): description.
+        name (type): description.
+
+    Returns:
+        type: description.
+    """
+
+- Use the `Description:` heading consistently. Do not use `Summary:` or a
+  bare sentence.
+- Do not include `Example:` blocks unless the task asks for them.
+- If a docstring example references a function that is renamed, update the
+  example as part of the rename.
+
+## 5. Comments
+
+- A short comment above each logical block inside a function.
+- Comments explain *why*, not *what the code does*. `# Guard the denominator
+  against division by zero`, not `# divide`.
+- Every multi-block function has at least one comment per block.
+
+## 6. Conditions
+
+- Explicit comparisons only. Write `x == True` rather than `x`, `x is None`
+  rather than `not x`.
+- Do not rely on truthiness for booleans, strings, or collections.
+- Do not add defensive checks for states the contract says cannot occur. If
+  a value is documented as always present, do not guard against it.
+
+## 7. Error handling
+
+- No `try/except` unless the task explicitly requires graceful handling of
+  an external failure (network, untrusted input, file I/O).
+- When a function can fail and the caller must know, raise. Do not return
+  `None` silently.
+- Use the schema or type system to reject bad data at the boundary rather
+  than manual `isinstance` checks scattered through the body.
+
+## 8. Configuration and constants
+
+- Runtime configuration (thresholds, model names, failure messages, feature
+  flags) lives in a single constants module for the package that uses it.
+- Values used only inside one module may stay at the top of that module.
+- Values used across two or more modules must be centralized.
+- When a constant is the closed set of valid values, also provide a mapping
+  from value to description, and derive the list from the mapping so the set
+  and its descriptions cannot drift.
+
+## 9. Prompts (when the project uses LLM prompts)
+
+- Prompt *data* (criteria, label definitions, examples) lives in a constants
+  module.
+- Prompt *text* lives in a prompts module, expressed as renderer functions
+  that build the final string from the data.
+- Renderer functions are named `build_<stage>_prompt()` and return a
+  string. Private block helpers are named `_render_<thing>_block()`.
+- The rendered output is assigned to a module-level constant so callers do
+  not need to know about the builder.
+- When refactoring a prompt, verify byte-identity against the pre-refactor
+  string.
+
+## 10. Retry-and-judge loops (when the project uses them)
+
+- Each stage that needs a retry-and-judge loop has its own inline loop. Do
+  not share a single generic retry helper across stages.
+- The loop shape is:
+
+      feedback = None
+      passed = False
+      for _ in range(max_attempts):
+          result = attempt(feedback)
+          verdict = judge(result)
+          if verdict.passed == True:
+              passed = True
+              break
+          feedback = format_feedback(verdict)
+
+- `max_attempts` is a named parameter with a documented default.
+- On exhaustion, the caller decides the fallback explicitly. Do not
+  silently return the last attempt.
+- The judge builder receives structured data, never a string you just
+  serialized.
+
+## 11. State and data contracts
+
+- When a pipeline passes state between stages, declare it with the language's
+  typed-dict equivalent and mark fields optional so each stage can return a
+  partial update.
+- When a field is declared as a list of model instances, every element in
+  that list must have been constructed through the model and serialized
+  through its own method. Do not mix raw dicts into a declared model list.
+
+## 12. Failure paths
+
+- Every failure mode in a pipeline produces the same user-facing message.
+- A failure path that ends silently is a bug. Add a failure handler or set
+  the failure message before returning.
+- Routing functions return a key that matches the key in the mapping they
+  feed. Renaming a route key means updating both the route function and the
+  mapping in the same change.
+
+## 13. Verification
+
+Every change is verified with:
+
+1. **Syntax check** on the changed files.
+2. **Whitespace check** (`git diff --check` or equivalent).
+3. **AST scan** for forbidden constructs — comprehensions, generator
+   expressions, anonymous functions — expected zero in changed functions.
+4. **Rename scan** — after any rename, search the repo for the old name and
+   report zero matches.
+5. **Behavior check** — compare output before and after on a sample input,
+   or confirm the logic in one sentence.
+6. **Byte-identity check** for prompt or serialization refactors.
+
+Report all six results, not just "it compiles."
+
+## 14. Stop and ask
+
+Stop and report (do not guess) when:
+
+- The stated scope conflicts with what the change requires.
+- A rule conflict cannot be resolved without a decision.
+- An out-of-scope importer of a renamed or moved name exists.
+- A verification step fails and the fix would require touching a file
+  outside scope.
+
+## 15. Definition of done
+
+A file is done when:
+
+- Every function has a `Description / Arguments / Returns` docstring.
+- No comprehensions, generator expressions, anonymous functions, partials,
+  nested defs, or function-as-argument patterns exist.
+- Every line does one action.
+- Every logical block has a comment.
+- All conditions are explicit.
+- The AST scan for forbidden constructs is zero.
+- Syntax and whitespace checks pass.
+- Behavior is unchanged, verified by a spot-check or byte-identity test.
